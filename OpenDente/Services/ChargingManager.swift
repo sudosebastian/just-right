@@ -95,6 +95,10 @@ final class ChargingManager: ObservableObject {
     /// regardless of which evaluateState code path ran.
     private(set) var lastIsCharging: Bool = false
 
+    /// Last sleep/LED values sent to the helper — skip redundant XPC on unrelated settings changes.
+    private var lastSyncedStopChargingWhenSleeping: Bool?
+    private var lastSyncedSleepLEDColor: UInt8?
+
     private convenience init() {
         self.init(settings: .shared, helper: HelperClient.shared, battery: .shared,
                   sleepAssertion: SleepAssertionManager())
@@ -134,8 +138,7 @@ final class ChargingManager: ObservableObject {
             .sink { [weak self] _ in
                 guard let self else { return }
                 self.evaluateState(self.battery.batteryState)
-                // Resync sleep setting with helper on any settings change.
-                // Lightweight: sends a single bool over XPC, no SMC writes.
+                // Only XPC when sleep/LED values actually changed.
                 self.syncSleepSettingsWithHelper()
             }
             .store(in: &cancellables)
@@ -187,8 +190,10 @@ final class ChargingManager: ObservableObject {
             Task { @MainActor in
                 self?.helperVersion = version
                 log.info("Helper version: \(version, privacy: .public)")
-                // Reset LED cache — helper may have restarted with default LED state
+                // Reset LED / sleep-sync caches — helper may have restarted with defaults
                 self?.lastLEDColor = nil
+                self?.lastSyncedStopChargingWhenSleeping = nil
+                self?.lastSyncedSleepLEDColor = nil
                 self?.updateMagSafeLED()
                 // Sync sleep settings with helper (defense-in-depth)
                 self?.syncSleepSettingsWithHelper()
@@ -200,6 +205,7 @@ final class ChargingManager: ObservableObject {
 
     /// Sync the stopChargingWhenSleeping setting to the helper (version-gated).
     /// Also computes the LED color the helper should use when inhibiting on sleep.
+    /// Skips XPC when the payload matches the last successful sync.
     private func syncSleepSettingsWithHelper() {
         guard let version = helperVersion,
               version.isVersionAtLeast(HelperConstants.minVersionSleepSync) else {
@@ -209,8 +215,14 @@ final class ChargingManager: ObservableObject {
         let ledColor: UInt8 = settings.controlMagSafeLED
             ? (settings.magSafeLEDOffWhenInactive ? HelperConstants.ledOff : HelperConstants.ledGreen)
             : 0xFF
+        let stop = settings.stopChargingWhenSleeping
+        if lastSyncedStopChargingWhenSleeping == stop, lastSyncedSleepLEDColor == ledColor {
+            return
+        }
+        lastSyncedStopChargingWhenSleeping = stop
+        lastSyncedSleepLEDColor = ledColor
         HelperClient.shared.syncSleepSettings(
-            stopChargingWhenSleeping: settings.stopChargingWhenSleeping,
+            stopChargingWhenSleeping: stop,
             sleepLEDColor: ledColor
         )
     }
