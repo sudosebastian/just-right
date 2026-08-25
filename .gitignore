@@ -29,5 +29,8 @@ build/
 # Claude Code local state
 .claude/
 
+# Local UI audit evidence
+.audit/
+
 # PDF reference docs
 *.pdf
