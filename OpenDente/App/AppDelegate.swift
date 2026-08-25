@@ -4,7 +4,7 @@ import SwiftUI
 import ServiceManagement
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
@@ -155,7 +155,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.contentSize = NSSize(width: 392, height: 600)
         popover.behavior = .transient
         popover.animates = false
+        popover.delegate = self
         popover.contentViewController = NSHostingController(rootView: PopoverView())
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        battery.popoverDidClose()
     }
 
     @objc private func togglePopover() {

@@ -5,6 +5,52 @@ import os.log
 
 private let log = Logger(subsystem: "com.opendente.app", category: "BatteryService")
 
+/// Which SMC / IORegistry fields a poll needs. Background ticks stay lean; the
+/// popover forces a full instrumentation read.
+struct BatteryPollNeeds: Equatable {
+    var temperature: Bool
+    var systemPower: Bool
+    var hardwarePercentage: Bool
+    var adapterPower: Bool
+    /// Voltage, amperage, battery power, capacity, cycles, adapter details, live VD0R/ID0R.
+    var detail: Bool
+
+    static let controlOnly = BatteryPollNeeds(
+        temperature: false,
+        systemPower: false,
+        hardwarePercentage: false,
+        adapterPower: false,
+        detail: false
+    )
+
+    static let full = BatteryPollNeeds(
+        temperature: true,
+        systemPower: true,
+        hardwarePercentage: true,
+        adapterPower: true,
+        detail: true
+    )
+
+    /// Derive read set from UI / control settings. Pure for tests.
+    static func resolve(
+        popoverOpen: Bool,
+        heatProtectionEnabled: Bool,
+        statusBarShowTemperature: Bool,
+        statusBarShowPower: Bool,
+        useHardwareBatteryPercentage: Bool,
+        needsAdapterPower: Bool
+    ) -> BatteryPollNeeds {
+        if popoverOpen { return .full }
+        return BatteryPollNeeds(
+            temperature: heatProtectionEnabled || statusBarShowTemperature,
+            systemPower: statusBarShowPower,
+            hardwarePercentage: useHardwareBatteryPercentage,
+            adapterPower: needsAdapterPower,
+            detail: false
+        )
+    }
+}
+
 /// Monitors battery state using IOKit power source APIs + SMC for detailed data.
 /// Reading does not require root.
 @MainActor
@@ -19,6 +65,8 @@ final class BatteryService: ObservableObject {
     private var runLoopSource: CFRunLoopSource?
     private let smc = SMCService.shared
     let settings: AppSettings
+    /// Whether the popover is visible — drives full vs lean SMC reads.
+    private(set) var isPopoverOpen = false
     /// Whether the first IORegistry diagnostic dump has been logged (avoid spamming every 2s)
     private var didLogIORegistryDiag = false
     /// Last logged NotChargingReason — only log when it changes
@@ -64,79 +112,124 @@ final class BatteryService: ObservableObject {
         smc.close()
     }
 
-    /// Immediate refresh when popover opens (don't wait for next tick)
+    /// Immediate full refresh when popover opens (don't wait for next tick)
     func popoverDidOpen() {
+        isPopoverOpen = true
         update()
     }
 
+    func popoverDidClose() {
+        isPopoverOpen = false
+    }
+
     func update() {
+        let needs = currentPollNeeds()
+        let previous = batteryState
         let ioKitState = readIOKitPowerSource()
-        let smcState = smcAvailable ? readSMCData() : SMCData()
-        let ioRegState = readIORegistryBattery()
+        let smcState = smcAvailable ? readSMCData(needs: needs, previous: previous) : SMCData()
+        let ioRegState = readIORegistryBattery(includeAdapterDetails: needs.detail)
 
         // Hardware SoC: B0RM/B0FC gives the raw fuel gauge percentage.
-        // BUIC is "Battery UI Charge" — the smoothed value macOS shows, same as IOKit.
         // BRSC is "Battery Remaining State of Charge" (ui16, high byte = %).
-        // We want the raw ratio for an independent reading.
         let hwPercent: Int? = {
-            // Primary: raw capacity ratio from fuel gauge
-            if let rem = smcState.remainingCapacity,
-               let full = smcState.fullChargeCapacity,
-               full > 0, rem >= 0 {
-                let ratio = Double(rem) / Double(full)
-                if ratio <= 1.1 {
-                    return max(0, min(100, Int(round(ratio * 100.0))))
+            if needs.hardwarePercentage || needs.detail {
+                if let rem = smcState.remainingCapacity,
+                   let full = smcState.fullChargeCapacity,
+                   full > 0, rem >= 0 {
+                    let ratio = Double(rem) / Double(full)
+                    if ratio <= 1.1 {
+                        return max(0, min(100, Int((ratio * 100.0).rounded())))
+                    }
                 }
+                if let brsc = smcState.brscPercentage { return brsc }
+                // Lean tick skipped capacity keys — keep prior value
+                if !needs.hardwarePercentage && !needs.detail {
+                    return previous.hardwarePercentage
+                }
+                return nil
             }
-            // Fallback: BRSC (if available)
-            if let brsc = smcState.brscPercentage { return brsc }
-            return nil
+            return previous.hardwarePercentage
         }()
 
-        // Always build AdapterInfo from IORegistry when available.
+        // Always build AdapterInfo from IORegistry when available on a detail read.
         // SMC VD0R/ID0R override negotiated voltage/current with live readings.
-        // Views decide visibility using isPluggedIn + mode (IORegistry caches stale data after unplug).
-        let adapterInfo: AdapterInfo? = ioRegState.adapterInfo.map { info in
-            AdapterInfo(
-                name: info.name,
-                description: info.description,
-                manufacturer: info.manufacturer,
-                model: info.model,
-                watts: info.watts,
-                voltage: smcState.adapterVoltage ?? info.voltage,
-                current: smcState.adapterCurrent ?? info.current,
-                serial: info.serial,
-                firmware: info.firmware,
-                isWireless: info.isWireless,
-                usbPDProfiles: info.usbPDProfiles,
-                activeProfileIndex: info.activeProfileIndex
-            )
-        }
+        // Carry forward when lean so closing the popover doesn't blank rows.
+        let adapterInfo: AdapterInfo? = {
+            guard needs.detail else { return previous.adapterInfo }
+            return ioRegState.adapterInfo.map { info in
+                AdapterInfo(
+                    name: info.name,
+                    description: info.description,
+                    manufacturer: info.manufacturer,
+                    model: info.model,
+                    watts: info.watts,
+                    voltage: smcState.adapterVoltage ?? info.voltage,
+                    current: smcState.adapterCurrent ?? info.current,
+                    serial: info.serial,
+                    firmware: info.firmware,
+                    isWireless: info.isWireless,
+                    usbPDProfiles: info.usbPDProfiles,
+                    activeProfileIndex: info.activeProfileIndex
+                )
+            }
+        }()
 
         let state = BatteryState(
             percentage: ioKitState.percentage,
             hardwarePercentage: hwPercent,
             isCharging: ioKitState.isCharging,
             isPluggedIn: ioKitState.isPluggedIn,
-            // B0RM for mAh display when available, otherwise estimate from B0FC
-            currentCapacity: smcState.remainingCapacity ?? smcState.fullChargeCapacity.map { $0 * ioKitState.percentage / 100 },
-            maxCapacity: smcState.fullChargeCapacity,
-            designCapacity: smcState.designCapacity,
-            cycleCount: smcState.cycleCount ?? ioKitState.cycleCount,
-            temperature: smcState.temperature,
-            voltage: smcState.voltage,
-            amperage: smcState.amperage,
-            systemPower: smcState.systemPower,
-            adapterPower: smcState.adapterPower,
+            currentCapacity: smcState.remainingCapacity
+                ?? smcState.fullChargeCapacity.map { $0 * ioKitState.percentage / 100 }
+                ?? previous.currentCapacity,
+            maxCapacity: smcState.fullChargeCapacity ?? previous.maxCapacity,
+            designCapacity: smcState.designCapacity ?? previous.designCapacity,
+            cycleCount: smcState.cycleCount ?? ioKitState.cycleCount ?? previous.cycleCount,
+            temperature: smcState.temperature ?? previous.temperature,
+            voltage: smcState.voltage ?? previous.voltage,
+            amperage: smcState.amperage ?? previous.amperage,
+            systemPower: smcState.systemPower ?? previous.systemPower,
+            adapterPower: smcState.adapterPower ?? previous.adapterPower,
             adapterInfo: adapterInfo,
-            batteryPower: smcState.batteryPower,
+            batteryPower: smcState.batteryPower ?? previous.batteryPower,
             notChargingReason: ioRegState.notChargingReason,
             chargerInhibitReason: ioRegState.chargerInhibitReason,
             timeToEmpty: ioKitState.timeToEmpty,
             timeToFull: ioKitState.timeToFull
         )
 
+        // Skip identical snapshots — stops Combine/SwiftUI fan-out while idle at limit.
+        guard state != previous else { return }
         batteryState = state
+    }
+
+    // MARK: - Poll needs
+
+    /// Exposed for tests — same logic as production ticks.
+    static func pollNeeds(
+        popoverOpen: Bool,
+        settings: AppSettings,
+        needsAdapterPower: Bool
+    ) -> BatteryPollNeeds {
+        BatteryPollNeeds.resolve(
+            popoverOpen: popoverOpen,
+            heatProtectionEnabled: settings.heatProtectionEnabled,
+            statusBarShowTemperature: settings.statusBarShowTemperature,
+            statusBarShowPower: settings.statusBarShowPower,
+            useHardwareBatteryPercentage: settings.useHardwareBatteryPercentage,
+            needsAdapterPower: needsAdapterPower
+        )
+    }
+
+    private func currentPollNeeds() -> BatteryPollNeeds {
+        let charging = ChargingManager.shared
+        let needsAdapterPower = charging.mode == .discharging
+            || charging.calibrationPhase == .dischargingToLow
+        return Self.pollNeeds(
+            popoverOpen: isPopoverOpen,
+            settings: settings,
+            needsAdapterPower: needsAdapterPower
+        )
     }
 
     // MARK: - IOKit Power Source (no root needed)
@@ -198,149 +291,153 @@ final class BatteryService: ObservableObject {
         var adapterCurrent: Double?  // ID0R (live adapter current)
         var batteryPower: Double?
         var cycleCount: Int?
-        var buicPercentage: Int?        // BUIC: UI-smoothed SoC (same as macOS %)
         var brscPercentage: Int?        // BRSC: Battery Remaining State of Charge
         var remainingCapacity: Int?
         var fullChargeCapacity: Int?
         var designCapacity: Int?
     }
 
-    private func readSMCData() -> SMCData {
+    private func readSMCData(needs: BatteryPollNeeds, previous _: BatteryState) -> SMCData {
         var data = SMCData()
 
-        // Temperature: prefer TB0T/TB1T (flt on Apple Silicon) over B0AT (ui16 deci-Kelvin)
-        if let val = smc.readKeyOptional("TB0T") {
-            if val.dataType.hasPrefix("flt"), let f = val.floatValue {
-                data.temperature = Double(f)
-            } else if let sp = val.sp78Value {
-                data.temperature = sp
+        if needs.temperature || needs.detail {
+            // Temperature: prefer TB0T (flt on Apple Silicon) over B0AT (ui16 deci-Kelvin)
+            if let val = smc.readKeyOptional("TB0T") {
+                if val.dataType.hasPrefix("flt"), let f = val.floatValue {
+                    data.temperature = Self.rounded(Double(f), places: 1)
+                } else if let sp = val.sp78Value {
+                    data.temperature = Self.rounded(sp, places: 1)
+                }
             }
-        }
-        // Fallback to B0AT if TB0T didn't work
-        if data.temperature == nil, let val = smc.readKeyOptional("B0AT") {
-            if val.dataType == "ui16", let raw = val.uint16Value {
-                let celsius = (Double(raw) - 2732.0) / 10.0
-                if celsius > -20 && celsius < 100 {
-                    data.temperature = celsius
+            if data.temperature == nil, let val = smc.readKeyOptional("B0AT") {
+                if val.dataType == "ui16", let raw = val.uint16Value {
+                    let celsius = (Double(raw) - 2732.0) / 10.0
+                    if celsius > -20 && celsius < 100 {
+                        data.temperature = Self.rounded(celsius, places: 1)
+                    }
                 }
             }
         }
 
-        // Voltage: B0AV in mV
-        if let raw = smc.readUInt16("B0AV") {
-            data.voltage = Double(raw) / 1000.0
-        }
-
-        // Current: B0AC in mA (signed)
-        if let raw = smc.readInt16("B0AC") {
-            data.amperage = Double(raw) / 1000.0
-        }
-
-        // System power: PSTR
-        if let val = smc.readKeyOptional("PSTR") {
-            if let f = val.floatValue, val.dataType.hasPrefix("flt") {
-                data.systemPower = Double(f)
-            } else if let sp = val.sp78Value {
-                data.systemPower = sp
+        if needs.systemPower || needs.detail {
+            if let val = smc.readKeyOptional("PSTR") {
+                if let f = val.floatValue, val.dataType.hasPrefix("flt") {
+                    data.systemPower = Self.rounded(Double(f), places: 1)
+                } else if let sp = val.sp78Value {
+                    data.systemPower = Self.rounded(sp, places: 1)
+                }
             }
         }
 
-        // Adapter power: PDTR
-        if let val = smc.readKeyOptional("PDTR") {
-            if let f = val.floatValue, val.dataType.hasPrefix("flt") {
-                data.adapterPower = Double(f)
-            } else if let sp = val.sp96Value {
-                data.adapterPower = sp
+        if needs.adapterPower || needs.detail {
+            if let val = smc.readKeyOptional("PDTR") {
+                if let f = val.floatValue, val.dataType.hasPrefix("flt") {
+                    data.adapterPower = Self.rounded(Double(f), places: 1)
+                } else if let sp = val.sp96Value {
+                    data.adapterPower = Self.rounded(sp, places: 1)
+                }
             }
         }
 
-        // Adapter voltage: VD0R (Apple Silicon — flt or uint16 mV)
-        if let val = smc.readKeyOptional("VD0R") {
-            if val.dataType.hasPrefix("flt"), let f = val.floatValue {
-                data.adapterVoltage = Double(f)
-            } else if let raw = val.uint16Value {
-                data.adapterVoltage = Double(raw) / 1000.0
+        guard needs.detail || needs.hardwarePercentage else { return data }
+
+        if needs.detail {
+            // Voltage: B0AV in mV
+            if let raw = smc.readUInt16("B0AV") {
+                data.voltage = Self.rounded(Double(raw) / 1000.0, places: 2)
+            }
+
+            // Current: B0AC in mA (signed)
+            if let raw = smc.readInt16("B0AC") {
+                data.amperage = Self.rounded(Double(raw) / 1000.0, places: 3)
+            }
+
+            // Adapter voltage: VD0R
+            if let val = smc.readKeyOptional("VD0R") {
+                if val.dataType.hasPrefix("flt"), let f = val.floatValue {
+                    data.adapterVoltage = Self.rounded(Double(f), places: 2)
+                } else if let raw = val.uint16Value {
+                    data.adapterVoltage = Self.rounded(Double(raw) / 1000.0, places: 2)
+                }
+            }
+
+            // Adapter current: ID0R
+            if let val = smc.readKeyOptional("ID0R") {
+                if val.dataType.hasPrefix("flt"), let f = val.floatValue {
+                    data.adapterCurrent = Self.rounded(Double(f), places: 3)
+                } else if let raw = val.uint16Value {
+                    data.adapterCurrent = Self.rounded(Double(raw) / 1000.0, places: 3)
+                }
+            }
+
+            // Battery power: prefer B0AP over V*A
+            if let val = smc.readKeyOptional("B0AP") {
+                if let f = val.floatValue, val.dataType.hasPrefix("flt") {
+                    data.batteryPower = Self.rounded(Double(f), places: 1)
+                } else if let raw = val.int32Value {
+                    data.batteryPower = Self.rounded(Double(raw) / 1000.0, places: 1)
+                }
+            }
+            if data.batteryPower == nil, let v = data.voltage, let a = data.amperage {
+                data.batteryPower = Self.rounded(v * a, places: 1)
+            }
+
+            if let raw = smc.readUInt16("B0CT") {
+                data.cycleCount = Int(raw)
+            }
+
+            if let raw = smc.readUInt16("B0DC") {
+                data.designCapacity = Int(raw)
             }
         }
 
-        // Adapter current: ID0R (Apple Silicon — flt or uint16 mA)
-        if let val = smc.readKeyOptional("ID0R") {
-            if val.dataType.hasPrefix("flt"), let f = val.floatValue {
-                data.adapterCurrent = Double(f)
-            } else if let raw = val.uint16Value {
-                data.adapterCurrent = Double(raw) / 1000.0
+        if needs.hardwarePercentage || needs.detail {
+            if let raw = smc.readUInt16("B0FC") {
+                data.fullChargeCapacity = Int(raw)
             }
-        }
 
-        // Battery power: prefer B0AP (direct hardware measurement in mW) over V*A calculation
-        if let val = smc.readKeyOptional("B0AP") {
-            if let f = val.floatValue, val.dataType.hasPrefix("flt") {
-                data.batteryPower = Double(f)
-            } else if let raw = val.int32Value {
-                data.batteryPower = Double(raw) / 1000.0  // mW -> W
+            // BRSC fallback for hardware %
+            if let raw = smc.readUInt16("BRSC") {
+                let pct = Int(raw >> 8)
+                if pct >= 0 && pct <= 100 {
+                    data.brscPercentage = pct
+                }
             }
-        }
-        // Fallback to V*A if B0AP unavailable
-        if data.batteryPower == nil, let v = data.voltage, let a = data.amperage {
-            data.batteryPower = v * a
-        }
 
-        // Cycle count
-        if let raw = smc.readUInt16("B0CT") {
-            data.cycleCount = Int(raw)
-        }
-
-        // BUIC: "Battery UI Charge" — smoothed percentage macOS shows to users.
-        // Kept for diagnostics, but NOT used as hardware SoC (it matches IOKit exactly).
-        if let raw = smc.readUInt8("BUIC"), raw <= 100 {
-            data.buicPercentage = Int(raw)
-        }
-
-        // BRSC: "Battery Remaining State of Charge" — ui16, high byte = percentage.
-        // May not exist on all Apple Silicon models.
-        if let raw = smc.readUInt16("BRSC") {
-            let pct = Int(raw >> 8)
-            if pct >= 0 && pct <= 100 {
-                data.brscPercentage = pct
-            }
-        }
-
-        // Capacity
-        if let raw = smc.readUInt16("B0FC") {
-            data.fullChargeCapacity = Int(raw)
-        }
-        if let raw = smc.readUInt16("B0DC") {
-            data.designCapacity = Int(raw)
-        }
-
-        // B0RM uses big-endian byte order per Asahi Linux docs, but try both.
-        // Use whichever gives a plausible ratio against B0FC.
-        if let val = smc.readKeyOptional("B0RM"), let fc = data.fullChargeCapacity, fc > 0 {
-            let be = val.uint16BigEndian.map(Int.init) ?? -1
-            let le = val.uint16Value.map(Int.init) ?? -1
-            let beRatio = Double(be) / Double(fc)
-            let leRatio = Double(le) / Double(fc)
-            if be >= 0 && beRatio <= 1.1 {
-                data.remainingCapacity = be
-            } else if le >= 0 && leRatio <= 1.1 {
-                data.remainingCapacity = le
+            // B0RM uses big-endian byte order per Asahi Linux docs, but try both.
+            if let val = smc.readKeyOptional("B0RM"), let fc = data.fullChargeCapacity, fc > 0 {
+                let be = val.uint16BigEndian.map(Int.init) ?? -1
+                let le = val.uint16Value.map(Int.init) ?? -1
+                let beRatio = Double(be) / Double(fc)
+                let leRatio = Double(le) / Double(fc)
+                if be >= 0 && beRatio <= 1.1 {
+                    data.remainingCapacity = be
+                } else if le >= 0 && leRatio <= 1.1 {
+                    data.remainingCapacity = le
+                }
             }
         }
 
         return data
     }
 
+    private static func rounded(_ value: Double, places: Int) -> Double {
+        let factor = pow(10.0, Double(places))
+        return (value * factor).rounded() / factor
+    }
+
     // MARK: - IORegistry (adapter details, not-charging reason)
 
-    private func readIORegistryBattery() -> (adapterInfo: AdapterInfo?, notChargingReason: UInt64?, chargerInhibitReason: UInt64?) {
+    private func readIORegistryBattery(includeAdapterDetails: Bool) -> (adapterInfo: AdapterInfo?, notChargingReason: UInt64?, chargerInhibitReason: UInt64?) {
         let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSmartBattery"))
         guard service != IO_OBJECT_NULL else { return (nil, nil, nil) }
         defer { IOObjectRelease(service) }
 
         // Read only the keys we need — NOT CreateCFProperties which copies the entire 16KB+ dict
-        // (PortControllerInfo alone is 9KB of data we never use)
-        let adapterDict = IORegistryEntryCreateCFProperty(service, "AdapterDetails" as CFString, kCFAllocatorDefault, 0)?
-            .takeRetainedValue() as? [String: Any]
+        let adapterDict: [String: Any]? = includeAdapterDetails
+            ? IORegistryEntryCreateCFProperty(service, "AdapterDetails" as CFString, kCFAllocatorDefault, 0)?
+                .takeRetainedValue() as? [String: Any]
+            : nil
         let chargerDict = IORegistryEntryCreateCFProperty(service, "ChargerData" as CFString, kCFAllocatorDefault, 0)?
             .takeRetainedValue() as? [String: Any]
 
@@ -357,11 +454,15 @@ final class BatteryService: ObservableObject {
 
             // AdapterVoltage in mV, Current in mA
             let voltage: Double = {
-                if let v = adapter["AdapterVoltage"] as? Int { return Double(v) / 1000.0 }
+                if let v = adapter["AdapterVoltage"] as? Int {
+                    return Self.rounded(Double(v) / 1000.0, places: 2)
+                }
                 return 0
             }()
             let current: Double = {
-                if let a = adapter["Current"] as? Int { return Double(a) / 1000.0 }
+                if let a = adapter["Current"] as? Int {
+                    return Self.rounded(Double(a) / 1000.0, places: 3)
+                }
                 return 0
             }()
 
@@ -375,8 +476,8 @@ final class BatteryService: ObservableObject {
                 for entry in menu {
                     if let v = entry["MaxVoltage"] as? Int, let a = entry["MaxCurrent"] as? Int {
                         profiles.append(USBPDProfile(
-                            voltage: Double(v) / 1000.0,
-                            current: Double(a) / 1000.0
+                            voltage: Self.rounded(Double(v) / 1000.0, places: 2),
+                            current: Self.rounded(Double(a) / 1000.0, places: 3)
                         ))
                     }
                 }
@@ -430,9 +531,8 @@ final class BatteryService: ObservableObject {
             }
 
             // Log IORegistry dict keys once, and re-log if adapter appears
-            // (first read may be on battery with sparse data)
             let hasFullAdapter = (adapterDict?.count ?? 0) > 1
-            if !didLogIORegistryDiag || (!didLogAdapterDetails && hasFullAdapter) {
+            if includeAdapterDetails && (!didLogIORegistryDiag || (!didLogAdapterDetails && hasFullAdapter)) {
                 let chargerKeys = chargerData.keys.sorted().joined(separator: ", ")
                 log.info("ChargerData keys: [\(chargerKeys, privacy: .public)]")
                 if let adapter = adapterDict {
@@ -449,15 +549,15 @@ final class BatteryService: ObservableObject {
 
     // MARK: - Polling
 
-    /// Fixed 2s polling interval. SMC reads cost ~300µs total per poll — negligible
-    /// even on battery. A fixed interval keeps the status bar responsive and charging
-    /// verification fast, with no measurable impact on battery life.
+    /// Fixed 2s polling interval. Lean background ticks skip unused SMC keys;
+    /// popover opens force a full instrumentation read.
     static let pollingInterval: TimeInterval = 2
 
     private func scheduleTimer() {
         timer?.invalidate()
+        // Timer fires on the main run loop — call update() directly (no Task hop).
         timer = Timer.scheduledTimer(withTimeInterval: Self.pollingInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            MainActor.assumeIsolated {
                 self?.update()
             }
         }
@@ -473,7 +573,6 @@ final class BatteryService: ObservableObject {
             // Callback fires on main RunLoop — use assumeIsolated for Swift 6 safety
             MainActor.assumeIsolated {
                 service.update()
-                service.scheduleTimer()
             }
         }, context)?.takeRetainedValue() {
             self.runLoopSource = source
