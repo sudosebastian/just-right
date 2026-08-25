@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct OpenDenteApp: App {
+struct JustRightApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {

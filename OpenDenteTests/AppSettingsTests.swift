@@ -1,5 +1,5 @@
 import XCTest
-@testable import OpenDente
+@testable import JustRight
 
 @MainActor
 final class AppSettingsTests: XCTestCase {

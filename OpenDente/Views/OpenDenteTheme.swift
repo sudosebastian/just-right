@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Small, durable visual vocabulary for a utility that is seen many times a day.
-enum OpenDenteTheme {
+enum JustRightTheme {
     static let accent = Color(red: 0.10, green: 0.52, blue: 0.38)
     static let warning = Color.orange
     static let critical = Color.red
@@ -18,7 +18,7 @@ struct LimitPresetButton: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
-        .tint(selection == value ? OpenDenteTheme.accent : .secondary)
+        .tint(selection == value ? JustRightTheme.accent : .secondary)
         .accessibilityLabel("Set charge limit to \(value) percent")
     }
 }

@@ -112,7 +112,7 @@ struct BatteryState: Equatable {
     )
 }
 
-/// The current operational mode of OpenDente
+/// The current operational mode of just-right.
 enum ChargingMode: String, CaseIterable {
     case charging         // Actively charging toward limit
     case paused           // Limit reached, using AC power

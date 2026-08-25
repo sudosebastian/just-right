@@ -29,7 +29,7 @@ final class MacSparkleUpdater {
     func start() {
         guard !isStarted else { return }
         guard hasUsableConfiguration else {
-            NSLog("OpenDente: Sparkle not started because its feed or public key is missing.")
+            NSLog("just-right: Sparkle not started because its feed or public key is missing.")
             return
         }
 
@@ -48,7 +48,7 @@ final class MacSparkleUpdater {
 
     func checkForUpdates() {
         guard isStarted else {
-            NSLog("OpenDente: Check for Updates ignored because Sparkle is not configured.")
+            NSLog("just-right: Check for Updates ignored because Sparkle is not configured.")
             return
         }
         updaterController.checkForUpdates(nil)

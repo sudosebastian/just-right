@@ -1,5 +1,5 @@
 import XCTest
-@testable import OpenDente
+@testable import JustRight
 
 final class ChargeScheduleTests: XCTestCase {
     private var calendar: Calendar {

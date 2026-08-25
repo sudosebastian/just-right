@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">just-right</title>
+  <desc id="desc">Two balanced charcoal forms hold an emerald point at the exact midpoint.</desc>
+  <rect x="48" y="48" width="928" height="928" rx="220" fill="#F7F3EA" stroke="#E9E1D3" stroke-width="8"/>
+  <rect x="214" y="250" width="275" height="524" rx="135" fill="#181818"/>
+  <rect x="535" y="250" width="275" height="524" rx="135" fill="#181818"/>
+  <circle cx="512" cy="512" r="154" fill="#F7F3EA"/>
+  <circle cx="512" cy="512" r="92" fill="#1A8561"/>
+</svg>

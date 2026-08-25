@@ -1,5 +1,5 @@
 import XCTest
-@testable import OpenDente
+@testable import JustRight
 
 /// Tests for SMCValue byte-to-value conversions.
 /// These are critical — wrong conversions mean wrong temperature/power readings,

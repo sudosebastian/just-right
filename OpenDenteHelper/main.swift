@@ -6,7 +6,7 @@ import os.log
 
 private let log = Logger(subsystem: HelperConstants.machServiceName, category: "Main")
 
-log.info("OpenDente Helper v\(HelperConstants.helperVersion, privacy: .public) starting")
+log.info("just-right helper v\(HelperConstants.helperVersion, privacy: .public) starting")
 
 // MARK: - Watchdog + Delegate
 

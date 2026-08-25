@@ -182,27 +182,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func checkHelperStatus() {
         let status = HelperInstaller.status
-        NSLog("[OpenDente] Helper status: \(HelperInstaller.statusDescription) (raw: \(String(describing: status)))")
+        NSLog("[just-right] Helper status: \(HelperInstaller.statusDescription) (raw: \(String(describing: status)))")
 
         switch status {
         case .notRegistered:
-            NSLog("[OpenDente] Attempting to register helper daemon...")
+            NSLog("[just-right] Attempting to register helper daemon...")
             if HelperInstaller.register() {
                 charging.connectToHelper()
             }
         case .requiresApproval:
             // Don't call register() — it always fails. User must toggle in System Settings.
-            NSLog("[OpenDente] Helper needs approval in System Settings > Login Items")
+            NSLog("[just-right] Helper needs approval in System Settings > Login Items")
         case .enabled:
-            NSLog("[OpenDente] Helper is enabled")
+            NSLog("[just-right] Helper is enabled")
         case .notFound:
-            NSLog("[OpenDente] Helper binary not found in app bundle")
+            NSLog("[just-right] Helper binary not found in app bundle")
         @unknown default:
             break
         }
 
         charging.isHelperInstalled = HelperInstaller.isRegistered
-        NSLog("[OpenDente] Helper registered: \(charging.isHelperInstalled)")
+        NSLog("[just-right] Helper registered: \(charging.isHelperInstalled)")
     }
 
     // MARK: - Sleep/Wake

@@ -16,7 +16,7 @@ enum DiagnosticExporter {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         let timestamp = formatter.string(from: Date())
-        panel.nameFieldStringValue = "OpenDente-Diagnostics-\(timestamp).txt"
+        panel.nameFieldStringValue = "just-right-diagnostics-\(timestamp).txt"
         panel.allowedContentTypes = [.plainText]
         panel.canCreateDirectories = true
 
@@ -59,7 +59,7 @@ enum DiagnosticExporter {
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime]
 
-        r += "=== OpenDente Diagnostic Report ===\n"
+        r += "=== just-right diagnostic report ===\n"
         r += "Generated: \(iso.string(from: Date()))\n"
         r += "App Version: \(appVersion) (\(buildNumber))\n"
         r += "Helper Version: \(ChargingManager.shared.helperVersion ?? "unknown")\n"

@@ -28,7 +28,7 @@ struct SettingsView: View {
             BatteryInfoTab()
                 .tabItem { Label("Battery", systemImage: "battery.100percent") }
         }
-        .tint(OpenDenteTheme.accent)
+        .tint(JustRightTheme.accent)
         .frame(width: 560)
         .frame(minHeight: 520)
     }
@@ -89,7 +89,7 @@ struct GeneralTab: View {
             Button("Open System Settings") {
                 HelperInstaller.openSystemSettings()
             }
-            Text("Toggle OpenDente ON in Login Items to approve the helper.")
+            Text("Toggle just-right ON in Login Items to approve the helper.")
                 .font(.caption)
                 .foregroundStyle(.orange)
         } else {
@@ -147,7 +147,7 @@ struct NotificationsTab: View {
     #if DEBUG
     private func sendTestNotification() {
         let content = UNMutableNotificationContent()
-        content.title = "OpenDente Test"
+        content.title = "just-right test"
         content.body = "Notifications are working!"
         content.sound = .default
 
@@ -320,14 +320,14 @@ struct AutomationTab: View {
                 if settings.scheduledTopUpWeekdays.isEmpty {
                     Text("Choose at least one day.")
                         .font(.caption)
-                        .foregroundStyle(OpenDenteTheme.warning)
+                        .foregroundStyle(JustRightTheme.warning)
                 } else if settings.scheduledTopUpEnabled, let nextTopUp {
                     Text("Next top up: \(nextTopUp.formatted(date: .abbreviated, time: .shortened))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
-                Text("OpenDente starts within 15 minutes of the set time. The Mac must be awake and connected to power.")
+                Text("just-right starts within 15 minutes of the set time. The Mac must be awake and connected to power.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -380,7 +380,7 @@ struct AutomationTab: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
-        .tint(selected ? OpenDenteTheme.accent : .secondary)
+        .tint(selected ? JustRightTheme.accent : .secondary)
         .accessibilityLabel("\(calendar.weekdaySymbols[weekday - 1]), \(selected ? "selected" : "not selected")")
     }
 }

@@ -6,6 +6,8 @@
 	<string>en</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleDisplayName</key>
+	<string>just-right</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -25,11 +27,11 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright 2025 OpenDente Contributors. MIT License.</string>
+	<string>Copyright 2025–2026 just-right contributors. MIT License.</string>
 	<!-- Sparkle 2: Tailnet-private Mac Deploy feed. -->
 	<key>SUFeedURL</key>
-	<string>https://sebastians-macbook-pro.tail76545e.ts.net/updates/OpenDente/stable/appcast.xml</string>
-	<!-- Private key lives only at ~/.macdeploy/secrets/opendente-sparkle-ed25519. -->
+	<string>https://sebastians-macbook-pro.tail76545e.ts.net/updates/just-right/stable/appcast.xml</string>
+	<!-- Private key lives only at ~/.macdeploy/secrets/just-right-sparkle-ed25519. -->
 	<key>SUPublicEDKey</key>
 	<string>LcpocIyUJfGLn2eVmGOixR+lkp1B5T5kWJJuthxsbtE=</string>
 	<key>SUEnableAutomaticChecks</key>

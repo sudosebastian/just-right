@@ -1,5 +1,5 @@
 import XCTest
-@testable import OpenDente
+@testable import JustRight
 
 /// Tests for PowerFlowView visual state logic.
 /// Ensures the display never lies — shows only measured data, never derived values.

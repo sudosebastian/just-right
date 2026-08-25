@@ -91,7 +91,7 @@ struct PopoverView: View {
                 .padding(.horizontal, 24)
                 .padding(.vertical, 12)
         }
-        .tint(OpenDenteTheme.accent)
+        .tint(JustRightTheme.accent)
         .frame(width: 360)
     }
 
@@ -111,7 +111,7 @@ struct PopoverView: View {
                         : charging.mode.statusBarIcon
                 )
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(charging.systemChargeLimitConflict ? OpenDenteTheme.warning : .secondary)
+                .foregroundStyle(charging.systemChargeLimitConflict ? JustRightTheme.warning : .secondary)
             }
 
             Spacer()
@@ -145,7 +145,7 @@ struct PopoverView: View {
 
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(OpenDenteTheme.subtleFill)
+                    .fill(JustRightTheme.subtleFill)
 
                 Capsule()
                     .fill(batteryColor)
@@ -188,18 +188,18 @@ struct PopoverView: View {
     private var batteryColor: Color {
         switch charging.mode {
         case .charging, .topUp:
-            return OpenDenteTheme.accent
+            return JustRightTheme.accent
         case .discharging:
-            return OpenDenteTheme.warning
+            return JustRightTheme.warning
         case .heatProtection:
-            return OpenDenteTheme.critical
+            return JustRightTheme.critical
         case .sailing:
-            return OpenDenteTheme.accent.opacity(0.72)
+            return JustRightTheme.accent.opacity(0.72)
         default:
             if displayPercentage <= 20 {
-                return OpenDenteTheme.critical
+                return JustRightTheme.critical
             }
-            return OpenDenteTheme.accent
+            return JustRightTheme.accent
         }
     }
 
@@ -381,7 +381,7 @@ struct PopoverView: View {
 
     private var bottomBar: some View {
         HStack {
-            Text("OpenDente")
+            Text("just-right")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
 

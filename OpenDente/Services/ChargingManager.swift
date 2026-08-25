@@ -275,7 +275,7 @@ final class ChargingManager: ObservableObject {
         }
 
         log.notice("""
-        === OpenDente Diagnostic Dump ===
+        === just-right diagnostic dump ===
         macOS: \(osStr, privacy: .public)
         Model: \(model, privacy: .public)
         Charging API: \(apiName, privacy: .public)
@@ -637,7 +637,7 @@ final class ChargingManager: ObservableObject {
             if !isPreventingSleep {
                 log.info("Sleep assertion: preventing sleep for calibration")
                 isPreventingSleep = sleepAssertion.preventSleep(
-                    reason: "OpenDente: Battery calibration in progress"
+                    reason: "just-right: Battery calibration in progress"
                 )
             }
             return
@@ -661,7 +661,7 @@ final class ChargingManager: ObservableObject {
         if shouldPrevent && !isPreventingSleep {
             log.info("Sleep assertion: preventing sleep (mode=\(self.mode.displayName, privacy: .public), \(pct, privacy: .public)% → \(self.settings.chargeLimit, privacy: .public)%)")
             isPreventingSleep = sleepAssertion.preventSleep(
-                reason: "OpenDente: Charging to \(settings.chargeLimit)%"
+                reason: "just-right: Charging to \(settings.chargeLimit)%"
             )
         } else if !shouldPrevent && isPreventingSleep {
             log.info("Sleep assertion: released (mode=\(self.mode.displayName, privacy: .public), pct=\(pct, privacy: .public)%, limit=\(self.settings.chargeLimit, privacy: .public)%, pluggedIn=\(state.isPluggedIn, privacy: .public))")

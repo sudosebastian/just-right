@@ -28,7 +28,8 @@ enum HelperConstants {
     /// How often the watchdog checks for missed heartbeats
     static let watchdogCheckInterval: TimeInterval = 30
 
-    /// Root-owned state directory
+    /// Root-owned state directory. The legacy name is retained across the
+    /// just-right rebrand so existing helper installations keep their state.
     static let stateDirectory = "/Library/Application Support/OpenDente"
 
     /// State file path (written atomically by helper)
