@@ -7,6 +7,7 @@ import os.log
 /// complexity, while the shell provides one hierarchy and one visual rhythm.
 struct SettingsView: View {
     @State private var destination: SettingsDestination = .general
+    @FocusState private var focusedDestination: SettingsDestination?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -75,9 +76,19 @@ struct SettingsView: View {
                         RoundedRectangle(cornerRadius: JustRightTheme.Radius.small)
                             .fill(destination == item ? JustRightTheme.subtleFill : Color.clear)
                     )
+                    .overlay {
+                        if focusedDestination == item {
+                            RoundedRectangle(cornerRadius: JustRightTheme.Radius.small)
+                                .stroke(JustRightTheme.accent, lineWidth: 2)
+                                .padding(1)
+                        }
+                    }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .focusable()
+                .focused($focusedDestination, equals: item)
+                .accessibilityHint("Press Space to open this settings page")
                 .accessibilityAddTraits(destination == item ? [.isSelected] : [])
             }
         }
@@ -816,6 +827,7 @@ struct BatteryInfoTab: View {
         .scrollContentBackground(.hidden)
         .padding(.horizontal, JustRightTheme.Space.x8)
         .padding(.bottom, JustRightTheme.Space.x6)
+        .frame(maxHeight: .infinity)
     }
 
     private var chargingAPIName: String {
