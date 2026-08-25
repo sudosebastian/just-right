@@ -13,6 +13,9 @@ struct SettingsView: View {
             ChargingTab()
                 .tabItem { Label("Charging", systemImage: "bolt.fill") }
 
+            AutomationTab()
+                .tabItem { Label("Automation", systemImage: "calendar.badge.clock") }
+
             NotificationsTab()
                 .tabItem { Label("Notifications", systemImage: "bell") }
 
@@ -25,7 +28,9 @@ struct SettingsView: View {
             BatteryInfoTab()
                 .tabItem { Label("Battery", systemImage: "battery.100percent") }
         }
-        .frame(width: 500)
+        .tint(OpenDenteTheme.accent)
+        .frame(width: 560)
+        .frame(minHeight: 520)
     }
 }
 
@@ -159,7 +164,7 @@ struct ChargingTab: View {
 
     var body: some View {
         Form {
-            Section("Charge Limit") {
+            Section("Charge limit") {
                 HStack {
                     Text("Limit")
                     Slider(
@@ -173,10 +178,19 @@ struct ChargingTab: View {
                         .font(.system(.body, design: .monospaced))
                         .frame(width: 45, alignment: .trailing)
                 }
+
+                HStack(spacing: 8) {
+                    Text("Presets")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    ForEach([60, 70, 80, 90, 100], id: \.self) { value in
+                        LimitPresetButton(value: value, selection: $settings.chargeLimit)
+                    }
+                }
             }
 
-            Section("Sailing Mode") {
-                Toggle("Enable Sailing Mode", isOn: $settings.sailingModeEnabled)
+            Section("Sailing mode") {
+                Toggle("Enable sailing mode", isOn: $settings.sailingModeEnabled)
 
                 if settings.sailingModeEnabled {
                     HStack {
@@ -198,12 +212,12 @@ struct ChargingTab: View {
                 }
             }
 
-            Section("Heat Protection") {
-                Toggle("Enable Heat Protection", isOn: $settings.heatProtectionEnabled)
+            Section("Heat protection") {
+                Toggle("Enable heat protection", isOn: $settings.heatProtectionEnabled)
 
                 if settings.heatProtectionEnabled {
                     HStack {
-                        Text("Max Temperature")
+                        Text("Maximum temperature")
                         Slider(
                             value: Binding(
                                 get: { TemperatureDisplay.toDisplay(settings.heatProtectionTemp) },
@@ -223,7 +237,7 @@ struct ChargingTab: View {
             }
 
             Section("Other") {
-                Toggle("Automatic Discharge", isOn: $settings.automaticDischarge)
+                Toggle("Automatic discharge", isOn: $settings.automaticDischarge)
                 Toggle("Control MagSafe LED", isOn: $settings.controlMagSafeLED)
                 if settings.controlMagSafeLED {
                     Toggle("Turn off LED when not charging", isOn: $settings.magSafeLEDOffWhenInactive)
@@ -237,18 +251,132 @@ struct ChargingTab: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Toggle("Stop Charging when Sleeping", isOn: $settings.stopChargingWhenSleeping)
+                Toggle("Stop charging when sleeping", isOn: $settings.stopChargingWhenSleeping)
                 Text("Inhibits charging before sleep so the battery stays at its current level.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Toggle("Disable Sleep until Charge Limit", isOn: $settings.disableSleepUntilChargeLimit)
+                Toggle("Keep awake until charge limit", isOn: $settings.disableSleepUntilChargeLimit)
                 Text("Keeps Mac awake while charging or discharging toward the limit.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Toggle("Use Hardware Battery Percentage", isOn: $settings.useHardwareBatteryPercentage)
+                Toggle("Use hardware battery percentage", isOn: $settings.useHardwareBatteryPercentage)
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+// MARK: - Automation Tab
+
+struct AutomationTab: View {
+    @ObservedObject var settings = AppSettings.shared
+    @ObservedObject var charging = ChargingManager.shared
+
+    private let calendar = Calendar.current
+
+    private var scheduleTime: Binding<Date> {
+        Binding(
+            get: {
+                var components = calendar.dateComponents([.year, .month, .day], from: Date())
+                components.hour = settings.scheduledTopUpHour
+                components.minute = settings.scheduledTopUpMinute
+                return calendar.date(from: components) ?? Date()
+            },
+            set: { date in
+                settings.scheduledTopUpHour = calendar.component(.hour, from: date)
+                settings.scheduledTopUpMinute = calendar.component(.minute, from: date)
+            }
+        )
+    }
+
+    private var nextTopUp: Date? {
+        ChargeSchedule.nextOccurrence(
+            weekdays: settings.scheduledTopUpWeekdays,
+            hour: settings.scheduledTopUpHour,
+            minute: settings.scheduledTopUpMinute
+        )
+    }
+
+    var body: some View {
+        Form {
+            Section("Scheduled top up") {
+                Toggle("Charge to 100% on a schedule", isOn: $settings.scheduledTopUpEnabled)
+
+                DatePicker("Start time", selection: scheduleTime, displayedComponents: .hourAndMinute)
+                    .disabled(!settings.scheduledTopUpEnabled)
+
+                HStack(spacing: 8) {
+                    ForEach(1...7, id: \.self) { weekday in
+                        weekdayButton(weekday)
+                    }
+                }
+                .disabled(!settings.scheduledTopUpEnabled)
+
+                if settings.scheduledTopUpWeekdays.isEmpty {
+                    Text("Choose at least one day.")
+                        .font(.caption)
+                        .foregroundStyle(OpenDenteTheme.warning)
+                } else if settings.scheduledTopUpEnabled, let nextTopUp {
+                    Text("Next top up: \(nextTopUp.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Text("OpenDente starts within 15 minutes of the set time. The Mac must be awake and connected to power.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Battery calibration") {
+                if let phase = charging.calibrationPhase {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(phase.displayName)
+                                .fontWeight(.medium)
+                            Spacer()
+                            Text("Step \(phase.stepNumber) of 4")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+
+                        ProgressView(value: Double(phase.stepNumber), total: 4)
+
+                        Button("Cancel calibration", role: .destructive) {
+                            charging.cancelCalibration()
+                        }
+                    }
+                } else {
+                    Button("Start calibration") {
+                        charging.startCalibration()
+                    }
+                    .disabled(!charging.isHelperInstalled || charging.chargingAPI == .unknown)
+                }
+
+                Text("Calibration charges to 100%, holds for one hour, discharges to 15%, then recharges to 100%. It can take several hours and keeps the Mac awake while running.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func weekdayButton(_ weekday: Int) -> some View {
+        let selected = settings.scheduledTopUpWeekdays.contains(weekday)
+        let symbol = calendar.veryShortWeekdaySymbols[weekday - 1]
+
+        return Button(symbol) {
+            var days = settings.scheduledTopUpWeekdays
+            if selected {
+                days.remove(weekday)
+            } else {
+                days.insert(weekday)
+            }
+            settings.scheduledTopUpWeekdays = days
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .tint(selected ? OpenDenteTheme.accent : .secondary)
+        .accessibilityLabel("\(calendar.weekdaySymbols[weekday - 1]), \(selected ? "selected" : "not selected")")
     }
 }
 

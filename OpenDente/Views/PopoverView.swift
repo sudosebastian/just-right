@@ -39,117 +39,98 @@ struct PopoverView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 8)
-
-            Divider()
+                .padding(.horizontal, 24)
+                .padding(.top, 24)
+                .padding(.bottom, 16)
 
             batteryBar
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.horizontal, 24)
+
+            if let phase = charging.calibrationPhase {
+                calibrationStatus(phase)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 16)
+            } else {
+                primaryActions
+                    .padding(.horizontal, 24)
+                    .padding(.top, 16)
+
+                limitPresets
+                    .padding(.horizontal, 24)
+                    .padding(.top, 12)
+            }
 
             if settings.showPowerFlow {
                 PowerFlowView(battery: battery.batteryState, mode: charging.mode)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 16)
             }
 
             if !charging.isHelperInstalled {
                 helperWarning
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 12)
             }
 
             if charging.systemChargeLimitConflict {
                 systemLimitWarning
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 12)
             }
 
             Divider()
+                .padding(.top, 16)
 
             detailsGrid
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 16)
 
             Divider()
 
             bottomBar
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
         }
-        .frame(width: 320)
+        .tint(OpenDenteTheme.accent)
+        .frame(width: 360)
     }
 
     // MARK: - Header
 
     private var header: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Limit: \(settings.chargeLimit)%")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.primary)
+        HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(displayPercentage)%")
+                    .font(.system(size: 40, weight: .semibold, design: .rounded).monospacedDigit())
+                    .contentTransition(.numericText())
 
-                HStack(spacing: 4) {
-                    Image(systemName: charging.systemChargeLimitConflict
-                          ? "exclamationmark.triangle.fill"
-                          : charging.mode.statusBarIcon)
-                        .font(.system(size: 10))
-                    Text(charging.systemChargeLimitConflict
-                         ? "System Limit Active"
-                         : charging.mode.displayName)
-                        .font(.system(size: 11))
-                }
-                .foregroundStyle(charging.systemChargeLimitConflict ? .orange : .secondary)
+                Label(
+                    charging.systemChargeLimitConflict ? "System limit active" : charging.mode.displayName,
+                    systemImage: charging.systemChargeLimitConflict
+                        ? "exclamationmark.triangle.fill"
+                        : charging.mode.statusBarIcon
+                )
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(charging.systemChargeLimitConflict ? OpenDenteTheme.warning : .secondary)
             }
 
             Spacer()
 
-            if charging.mode == .topUp {
-                Button(action: { charging.cancelTopUp() }) {
-                    Image(systemName: "xmark.circle")
-                        .font(.system(size: 14))
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .tint(.red)
-                .help("Cancel Top Up")
-            } else if charging.mode == .discharging {
-                Button(action: { charging.stopDischarge() }) {
-                    Image(systemName: "stop.circle")
-                        .font(.system(size: 14))
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .tint(.red)
-                .help("Stop Discharge")
-            } else {
-                Button(action: { charging.startTopUp() }) {
-                    Image(systemName: "arrow.up.to.line.circle")
-                        .font(.system(size: 14))
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(!battery.batteryState.isPluggedIn || !charging.isHelperInstalled || charging.chargingAPI == .unknown)
-                .help("Top Up to 100%")
-
-                Button(action: { charging.startDischarge() }) {
-                    Image(systemName: "arrow.down.circle")
-                        .font(.system(size: 14))
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(!canDischarge)
-                .help("Discharge to Limit")
+            VStack(alignment: .trailing, spacing: 4) {
+                Text("Charge limit")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Text("\(settings.chargeLimit)%")
+                    .font(.system(size: 20, weight: .semibold, design: .rounded).monospacedDigit())
             }
 
             Button(action: { openSettings() }) {
-                Image(systemName: "gear")
-                    .font(.system(size: 14))
+                Image(systemName: "gearshape")
+                    .font(.system(size: 15))
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
+            .help("Open settings")
         }
     }
 
@@ -163,10 +144,10 @@ struct PopoverView: View {
             let sailingLower = CGFloat(settings.sailingLowerBound) / 100.0
 
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color(nsColor: .quaternarySystemFill))
+                Capsule()
+                    .fill(OpenDenteTheme.subtleFill)
 
-                RoundedRectangle(cornerRadius: 6)
+                Capsule()
                     .fill(batteryColor)
                     .frame(width: width * percentage)
 
@@ -182,17 +163,9 @@ struct PopoverView: View {
                     .frame(width: 2)
                     .offset(x: width * limitPosition - 1)
 
-                HStack {
-                    modeIcon
-                        .font(.system(size: 11, weight: .bold))
-                    Text("\(displayPercentage)%")
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                }
-                .foregroundStyle(percentage > 0.3 ? .white : .primary)
-                .padding(.leading, 8)
             }
         }
-        .frame(height: 28)
+        .frame(height: 10)
     }
 
     @ViewBuilder
@@ -215,18 +188,88 @@ struct PopoverView: View {
     private var batteryColor: Color {
         switch charging.mode {
         case .charging, .topUp:
-            return .green
+            return OpenDenteTheme.accent
         case .discharging:
-            return .orange
+            return OpenDenteTheme.warning
         case .heatProtection:
-            return .red
+            return OpenDenteTheme.critical
         case .sailing:
-            return .blue
+            return OpenDenteTheme.accent.opacity(0.72)
         default:
             if displayPercentage <= 20 {
-                return .red
+                return OpenDenteTheme.critical
             }
-            return .green
+            return OpenDenteTheme.accent
+        }
+    }
+
+    // MARK: - Primary Controls
+
+    private var primaryActions: some View {
+        HStack(spacing: 8) {
+            if charging.mode == .topUp {
+                Button("Cancel top up", role: .destructive) {
+                    charging.cancelTopUp()
+                }
+                .buttonStyle(.bordered)
+            } else if charging.mode == .discharging {
+                Button("Stop discharge", role: .destructive) {
+                    charging.stopDischarge()
+                }
+                .buttonStyle(.bordered)
+            } else {
+                Button {
+                    charging.startTopUp()
+                } label: {
+                    Label("Top up", systemImage: "arrow.up.to.line")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!battery.batteryState.isPluggedIn || !charging.isHelperInstalled || charging.chargingAPI == .unknown)
+
+                Button {
+                    charging.startDischarge()
+                } label: {
+                    Label("Discharge", systemImage: "arrow.down.to.line")
+                }
+                .buttonStyle(.bordered)
+                .disabled(!canDischarge)
+            }
+
+            Spacer()
+        }
+        .controlSize(.small)
+    }
+
+    private var limitPresets: some View {
+        HStack(spacing: 8) {
+            Text("Limit")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            Spacer()
+            ForEach([60, 70, 80, 90, 100], id: \.self) { value in
+                LimitPresetButton(value: value, selection: $settings.chargeLimit)
+            }
+        }
+    }
+
+    private func calibrationStatus(_ phase: CalibrationPhase) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(phase.displayName)
+                    .font(.system(size: 12, weight: .medium))
+                Spacer()
+                Text("\(phase.stepNumber)/4")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+
+            ProgressView(value: Double(phase.stepNumber), total: 4)
+
+            Button("Cancel calibration", role: .destructive) {
+                charging.cancelCalibration()
+            }
+            .buttonStyle(.borderless)
+            .font(.system(size: 11))
         }
     }
 
@@ -338,20 +381,9 @@ struct PopoverView: View {
 
     private var bottomBar: some View {
         HStack {
-            HStack(spacing: 6) {
-                Text("\(settings.chargeLimit)%")
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .frame(width: 35)
-
-                Slider(
-                    value: Binding(
-                        get: { Double(settings.chargeLimit) },
-                        set: { settings.chargeLimit = Int(($0 / 5).rounded() * 5) }
-                    ),
-                    in: 20...100
-                )
-                .controlSize(.small)
-            }
+            Text("OpenDente")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
 
             Spacer()
 

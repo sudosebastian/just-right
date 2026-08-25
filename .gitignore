@@ -19,6 +19,7 @@ build/
 # macOS
 .DS_Store
 .AppleDouble
+._*
 .LSOverride
 
 # Swift Package Manager
@@ -30,4 +31,3 @@ build/
 
 # PDF reference docs
 *.pdf
-

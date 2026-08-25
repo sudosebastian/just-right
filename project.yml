@@ -33,7 +33,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: OpenDente/Resources/OpenDente.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.opendente.app
         PRODUCT_NAME: OpenDente
-        MARKETING_VERSION: "0.1.0"
+        MARKETING_VERSION: "0.2.0"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: P4D7A49H95
@@ -48,7 +48,7 @@ targets:
         script: |
           # Stamp build number with git commit hash
           PLIST="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
-          GIT_HASH=$(git -C "${SRCROOT}" rev-parse --short HEAD)
+          GIT_HASH=$(git -C "${SRCROOT}" rev-parse --short HEAD 2>/dev/null || echo "dev")
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${GIT_HASH}" "${PLIST}"
 
           # Copy helper tool into app bundle

@@ -79,6 +79,81 @@ final class AppSettings: ObservableObject {
         set { objectWillChange.send(); defaults.set(newValue, forKey: "automaticDischarge") }
     }
 
+    // MARK: - Scheduled Top Up
+
+    var scheduledTopUpEnabled: Bool {
+        get { defaults.bool(forKey: "scheduledTopUpEnabled") }
+        set { objectWillChange.send(); defaults.set(newValue, forKey: "scheduledTopUpEnabled") }
+    }
+
+    var scheduledTopUpHour: Int {
+        get {
+            guard defaults.object(forKey: "scheduledTopUpHour") != nil else { return 7 }
+            return min(23, max(0, defaults.integer(forKey: "scheduledTopUpHour")))
+        }
+        set {
+            objectWillChange.send()
+            defaults.set(min(23, max(0, newValue)), forKey: "scheduledTopUpHour")
+        }
+    }
+
+    var scheduledTopUpMinute: Int {
+        get {
+            guard defaults.object(forKey: "scheduledTopUpMinute") != nil else { return 0 }
+            return min(59, max(0, defaults.integer(forKey: "scheduledTopUpMinute")))
+        }
+        set {
+            objectWillChange.send()
+            defaults.set(min(59, max(0, newValue)), forKey: "scheduledTopUpMinute")
+        }
+    }
+
+    /// Calendar weekday values (1 = Sunday, 7 = Saturday). Defaults to weekdays.
+    var scheduledTopUpWeekdays: Set<Int> {
+        get {
+            guard let values = defaults.array(forKey: "scheduledTopUpWeekdays") as? [Int] else {
+                return Set(2...6)
+            }
+            return Set(values.filter { (1...7).contains($0) })
+        }
+        set {
+            objectWillChange.send()
+            defaults.set(newValue.filter { (1...7).contains($0) }.sorted(), forKey: "scheduledTopUpWeekdays")
+        }
+    }
+
+    var lastScheduledTopUpDay: String? {
+        get { defaults.string(forKey: "lastScheduledTopUpDay") }
+        set { defaults.set(newValue, forKey: "lastScheduledTopUpDay") }
+    }
+
+    // MARK: - Calibration
+
+    var savedCalibrationPhase: CalibrationPhase? {
+        get {
+            guard let raw = defaults.string(forKey: "calibrationPhase") else { return nil }
+            return CalibrationPhase(rawValue: raw)
+        }
+        set {
+            if let newValue {
+                defaults.set(newValue.rawValue, forKey: "calibrationPhase")
+            } else {
+                defaults.removeObject(forKey: "calibrationPhase")
+            }
+        }
+    }
+
+    var savedCalibrationPhaseStartedAt: Date? {
+        get { defaults.object(forKey: "calibrationPhaseStartedAt") as? Date }
+        set {
+            if let newValue {
+                defaults.set(newValue, forKey: "calibrationPhaseStartedAt")
+            } else {
+                defaults.removeObject(forKey: "calibrationPhaseStartedAt")
+            }
+        }
+    }
+
     // MARK: - Sleep
 
     var stopChargingWhenSleeping: Bool {

@@ -19,14 +19,14 @@ The app writes to the SMC. It tries to fail safe (charging is restored on quit, 
 
 ## Compared to AlDente
 
-Core charging features overlap with what AlDente puts behind its Pro tier: charge limit, sailing mode, heat protection, force discharge, MagSafe LED control, sleep handling.
+Core charging features overlap with what AlDente puts behind its Pro tier: charge limit, sailing mode, heat protection, force discharge, MagSafe LED control, sleep handling, scheduled top ups, and battery calibration.
 
 What's different here:
 
 - Open source, GPL-3. No Pro tier, no paywalled features.
 - No telemetry, no analytics, no auto-update server. The app talks to your battery and nothing else.
 - Fixed 2-second polling and no animated power-flow visualization - AlDente's drain on the battery itself was the original motivation to write this.
-- Smaller in scope. No calibration mode, no auto-update, English-only UI, no fancy onboarding.
+- Smaller in scope. No auto-update service, English-only UI, no telemetry, and no decorative background animation.
 
 ## Apple's native charge limit (macOS 26.4)
 
@@ -45,6 +45,9 @@ OpenDente also detects when it's the system limit (rather than its own write) th
 - Sleep handling - stop charging during sleep; optionally inhibit sleep until the limit is reached
 - MagSafe LED reflects actual charging state
 - Per-event native notifications
+- Scheduled top ups on selected weekdays
+- Four-stage battery calibration (charge, hold, discharge, recharge) that resumes after a restart
+- One-click 60%, 70%, 80%, 90%, and 100% charge-limit presets
 
 ## What it shows
 

@@ -42,6 +42,11 @@ final class ChargingManager: ObservableObject {
     @Published var chargingAPI: SMCChargingAPI = .unknown
     @Published var isHelperInstalled = false
     @Published private(set) var isPreventingSleep = false
+    @Published private(set) var calibrationPhase: CalibrationPhase?
+    @Published private(set) var calibrationPhaseStartedAt: Date?
+
+    static let calibrationHoldDuration: TimeInterval = 60 * 60
+    var nowProvider: () -> Date = Date.init
 
     private let smc = SMCService.shared
     private let battery: BatteryService
@@ -102,6 +107,8 @@ final class ChargingManager: ObservableObject {
         self.helper = helper
         self.battery = battery
         self.sleepAssertion = sleepAssertion ?? SleepAssertionManager()
+        self.calibrationPhase = settings.savedCalibrationPhase
+        self.calibrationPhaseStartedAt = settings.savedCalibrationPhaseStartedAt
     }
 
     // MARK: - Lifecycle
@@ -136,6 +143,10 @@ final class ChargingManager: ObservableObject {
         // Evaluate immediately — the Combine publisher delivers on next run loop,
         // but we need mode set before setupStatusItem() runs
         evaluateState(battery.batteryState)
+
+        if calibrationPhase != nil {
+            log.notice("Resuming saved calibration cycle")
+        }
     }
 
     /// Connect to the helper daemon and start heartbeat.
@@ -294,9 +305,16 @@ final class ChargingManager: ObservableObject {
         // Not plugged in = on battery, nothing to control.
         // Exception: during force discharge, IOKit reports power source as "battery"
         // even though the charger is physically connected. Don't kill our own discharge.
-        guard state.isPluggedIn || mode == .discharging else {
+        let calibrationAdapterPresent = calibrationPhase == .dischargingToLow
+            && (state.adapterPower ?? 0) > 0.1
+        guard state.isPluggedIn || mode == .discharging || calibrationAdapterPresent else {
             if mode == .topUp {
                 log.info("Top Up ended: unplugged at \(state.percentage, privacy: .public)%")
+            }
+            if calibrationPhase != nil {
+                log.notice("Calibration cancelled: power adapter disconnected")
+                forceDischarge(false)
+                clearCalibration()
             }
             // Clean slate — no pending inhibit verification on battery
             firstInhibitTime = nil
@@ -313,7 +331,7 @@ final class ChargingManager: ObservableObject {
                 heatProtectionTimer = Date()
                 if mode != .heatProtection {
                     log.warning("Heat protection: \(temp, format: .fixed(precision: 1), privacy: .public)°C ≥ \(self.settings.heatProtectionTemp, format: .fixed(precision: 1), privacy: .public)°C at \(state.percentage, privacy: .public)%")
-                    if mode == .discharging {
+                    if mode == .discharging || calibrationPhase == .dischargingToLow {
                         forceDischarge(false)
                     }
                     inhibitCharging()
@@ -335,14 +353,38 @@ final class ChargingManager: ObservableObject {
             }
         }
 
-        // Top Up mode — stay until unplugged (guard above) or user cancels
-        if mode == .topUp {
-            updateSystemChargeLimitConflict(state)
+        // A calibration cycle is independent from the displayed mode so heat protection
+        // can pause it safely and the cycle can resume once the battery cools.
+        if calibrationPhase != nil {
+            evaluateCalibration(state)
             return
         }
 
-        // Calibration mode - handled separately
+        // Preserve the legacy externally-set calibration mode used by older saved
+        // state and tests. New calibration cycles always carry an explicit phase.
         if mode == .calibrating {
+            return
+        }
+
+        // Scheduled top up. The 15-minute trigger window prevents a wake or launch much
+        // later in the day from unexpectedly charging to 100%.
+        if ChargeSchedule.shouldStart(
+            enabled: settings.scheduledTopUpEnabled,
+            weekdays: settings.scheduledTopUpWeekdays,
+            hour: settings.scheduledTopUpHour,
+            minute: settings.scheduledTopUpMinute,
+            now: nowProvider(),
+            lastTriggeredDay: settings.lastScheduledTopUpDay
+        ), canControlCharging {
+            settings.lastScheduledTopUpDay = ChargeSchedule.dayKey(for: nowProvider())
+            log.notice("Scheduled Top Up started")
+            startTopUp()
+            return
+        }
+
+        // Top Up mode — stay until unplugged (guard above) or user cancels
+        if mode == .topUp {
+            updateSystemChargeLimitConflict(state)
             return
         }
 
@@ -490,8 +532,9 @@ final class ChargingManager: ObservableObject {
         modeBeforeSleep = mode
         log.notice("Will sleep: mode=\(self.mode.displayName, privacy: .public), stopCharging=\(self.settings.stopChargingWhenSleeping, privacy: .public), disableSleep=\(self.settings.disableSleepUntilChargeLimit, privacy: .public)")
 
-        // Always stop discharge before sleep — no system load means meaningless drain
-        if mode == .discharging {
+        // Always stop discharge before sleep — no system load means meaningless drain.
+        // A calibration discharge resumes after wake via resyncSMCAfterWake().
+        if mode == .discharging || calibrationPhase == .dischargingToLow {
             forceDischarge(false)
             log.info("Will sleep: stopped discharge")
         }
@@ -576,7 +619,9 @@ final class ChargingManager: ObservableObject {
         case .discharging:
             forceDischarge(true)
             log.info("Wake resync: re-enabled discharge")
-        case .onBattery, .idle, .calibrating:
+        case .calibrating:
+            resyncCalibrationState()
+        case .onBattery, .idle:
             break
         }
     }
@@ -586,6 +631,18 @@ final class ChargingManager: ObservableObject {
     /// Update IOPMAssertion to prevent/allow system idle sleep.
     /// Called at the end of every evaluateState.
     private func updateSleepAssertion(_ state: BatteryState) {
+        let calibrationAdapterPresent = state.isPluggedIn
+            || (calibrationPhase == .dischargingToLow && (state.adapterPower ?? 0) > 0.1)
+        if calibrationPhase != nil && calibrationAdapterPresent {
+            if !isPreventingSleep {
+                log.info("Sleep assertion: preventing sleep for calibration")
+                isPreventingSleep = sleepAssertion.preventSleep(
+                    reason: "OpenDente: Battery calibration in progress"
+                )
+            }
+            return
+        }
+
         guard settings.disableSleepUntilChargeLimit else {
             if isPreventingSleep {
                 log.info("Sleep assertion: released (setting disabled)")
@@ -619,7 +676,10 @@ final class ChargingManager: ObservableObject {
     /// The system uses a separate firmware gate from CHTE — both must be open.
     /// NotChargingReason bit 24 (0x1000000) = system-level inhibit.
     private func updateSystemChargeLimitConflict(_ state: BatteryState) {
-        let wantsToCharge = mode == .charging || mode == .topUp
+        let calibrationWantsToCharge = calibrationPhase == .chargingToFull
+            || calibrationPhase == .holdingAtFull
+            || calibrationPhase == .rechargingToFull
+        let wantsToCharge = mode == .charging || mode == .topUp || calibrationWantsToCharge
         let batteryReceivingPower = (state.batteryPower ?? 0) > 0.1
 
         if wantsToCharge && !state.isCharging && state.isPluggedIn
@@ -663,6 +723,105 @@ final class ChargingManager: ObservableObject {
 
         inhibitCharging()
         mode = .idle
+    }
+
+    // MARK: - Calibration
+
+    /// Start a full calibration cycle: charge, hold, discharge, then recharge.
+    func startCalibration() {
+        guard canControlCharging else {
+            log.warning("Cannot start calibration: \(self.controlUnavailableReason, privacy: .public)")
+            return
+        }
+        guard calibrationPhase == nil else { return }
+
+        log.notice("Calibration started at \(self.battery.batteryState.percentage, privacy: .public)%")
+        forceDischarge(false)
+        enableCharging()
+        setCalibrationPhase(.chargingToFull)
+        mode = .calibrating
+    }
+
+    /// Cancel calibration and immediately return control to the normal charge limit.
+    func cancelCalibration() {
+        guard calibrationPhase != nil else { return }
+        log.notice("Calibration cancelled by user at \(self.battery.batteryState.percentage, privacy: .public)%")
+
+        forceDischarge(false)
+        clearCalibration()
+        mode = .idle
+        evaluateState(battery.batteryState)
+    }
+
+    private func evaluateCalibration(_ state: BatteryState) {
+        guard let phase = calibrationPhase else { return }
+        let pct = state.effectivePercentage(useHardware: settings.useHardwareBatteryPercentage)
+        let wasPausedForHeat = mode == .heatProtection
+
+        if mode != .calibrating { mode = .calibrating }
+        if wasPausedForHeat {
+            resyncCalibrationState()
+        }
+
+        switch phase {
+        case .chargingToFull:
+            updateSystemChargeLimitConflict(state)
+            if pct >= 100 {
+                log.notice("Calibration: reached 100%, beginning one-hour hold")
+                setCalibrationPhase(.holdingAtFull)
+            }
+
+        case .holdingAtFull:
+            let startedAt = calibrationPhaseStartedAt ?? nowProvider()
+            if nowProvider().timeIntervalSince(startedAt) >= Self.calibrationHoldDuration {
+                log.notice("Calibration: hold complete, discharging to 15%")
+                forceDischarge(true)
+                setCalibrationPhase(.dischargingToLow)
+            }
+
+        case .dischargingToLow:
+            if pct <= 15 {
+                log.notice("Calibration: reached 15%, recharging to 100%")
+                forceDischarge(false)
+                enableCharging()
+                setCalibrationPhase(.rechargingToFull)
+            }
+
+        case .rechargingToFull:
+            updateSystemChargeLimitConflict(state)
+            if pct >= 100 {
+                log.notice("Calibration complete")
+                inhibitCharging()
+                clearCalibration()
+                mode = .idle
+            }
+        }
+    }
+
+    private func setCalibrationPhase(_ phase: CalibrationPhase) {
+        let startedAt = nowProvider()
+        calibrationPhase = phase
+        calibrationPhaseStartedAt = startedAt
+        settings.savedCalibrationPhase = phase
+        settings.savedCalibrationPhaseStartedAt = startedAt
+    }
+
+    private func clearCalibration() {
+        calibrationPhase = nil
+        calibrationPhaseStartedAt = nil
+        settings.savedCalibrationPhase = nil
+        settings.savedCalibrationPhaseStartedAt = nil
+    }
+
+    private func resyncCalibrationState() {
+        switch calibrationPhase {
+        case .chargingToFull, .holdingAtFull, .rechargingToFull:
+            enableCharging()
+        case .dischargingToLow:
+            forceDischarge(true)
+        case nil:
+            break
+        }
     }
 
     /// Manually start discharge
@@ -776,7 +935,9 @@ final class ChargingManager: ObservableObject {
             inhibitCharging()
         case .discharging:
             forceDischarge(true)
-        case .onBattery, .idle, .calibrating:
+        case .calibrating:
+            resyncCalibrationState()
+        case .onBattery, .idle:
             break
         }
         updateMagSafeLED()
@@ -814,7 +975,10 @@ final class ChargingManager: ObservableObject {
         } else if systemChargeLimitConflict {
             // System is blocking — LED should reflect "not charging" despite our intent
             color = settings.magSafeLEDOffWhenInactive ? HelperConstants.ledOff : HelperConstants.ledGreen
-        } else if mode == .discharging || mode == .charging || mode == .topUp {
+        } else if mode == .discharging || mode == .charging || mode == .topUp
+                    || calibrationPhase == .chargingToFull
+                    || calibrationPhase == .dischargingToLow
+                    || calibrationPhase == .rechargingToFull {
             color = HelperConstants.ledOrange
         } else if isCharging {
             color = HelperConstants.ledOrange  // IOKit still reports charging (transition)
@@ -858,6 +1022,7 @@ final class ChargingManager: ObservableObject {
             helper.setMagSafeLED(color: HelperConstants.ledAuto, completion: nil)
         }
         lastLEDColor = nil
+        clearCalibration()
         sleepAssertion.allowSleep()
         isPreventingSleep = false
         mode = .idle

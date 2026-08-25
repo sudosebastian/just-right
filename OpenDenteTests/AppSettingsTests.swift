@@ -114,5 +114,21 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertFalse(settings.magSafeLEDOffWhenInactive)
         XCTAssertFalse(settings.launchAtLogin)
         XCTAssertFalse(settings.useHardwareBatteryPercentage)
+        XCTAssertFalse(settings.scheduledTopUpEnabled)
+    }
+
+    // MARK: - Scheduled Top Up
+
+    func testScheduledTopUpDefaultsToWeekdayMornings() {
+        XCTAssertEqual(settings.scheduledTopUpHour, 7)
+        XCTAssertEqual(settings.scheduledTopUpMinute, 0)
+        XCTAssertEqual(settings.scheduledTopUpWeekdays, Set(2...6))
+    }
+
+    func testScheduledTopUpTimeClampsToClockBounds() {
+        settings.scheduledTopUpHour = 40
+        settings.scheduledTopUpMinute = -5
+        XCTAssertEqual(settings.scheduledTopUpHour, 23)
+        XCTAssertEqual(settings.scheduledTopUpMinute, 0)
     }
 }
