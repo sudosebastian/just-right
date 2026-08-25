@@ -26,5 +26,16 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright 2025 OpenDente Contributors. MIT License.</string>
+	<!-- Sparkle 2: Tailnet-private Mac Deploy feed. -->
+	<key>SUFeedURL</key>
+	<string>https://sebastians-macbook-pro.tail76545e.ts.net/updates/OpenDente/stable/appcast.xml</string>
+	<!-- Private key lives only at ~/.macdeploy/secrets/opendente-sparkle-ed25519. -->
+	<key>SUPublicEDKey</key>
+	<string>LcpocIyUJfGLn2eVmGOixR+lkp1B5T5kWJJuthxsbtE=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<!-- 24 hours -->
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 </dict>
 </plist>

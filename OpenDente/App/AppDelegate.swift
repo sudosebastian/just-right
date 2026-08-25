@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard !Self.isRunningTests else { return }
 
+        MacSparkleUpdater.shared.start()
         battery.start()
         charging.start()
 

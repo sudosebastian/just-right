@@ -57,6 +57,11 @@ struct GeneralTab: View {
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
+
+                Button("Check for Updates…") {
+                    MacSparkleUpdater.shared.checkForUpdates()
+                }
+                .disabled(!MacSparkleUpdater.shared.isAvailable)
             }
 
             Section("Privileged Helper") {

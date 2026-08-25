@@ -24,9 +24,9 @@ Core charging features overlap with what AlDente puts behind its Pro tier: charg
 What's different here:
 
 - Open source, GPL-3. No Pro tier, no paywalled features.
-- No telemetry, no analytics, no auto-update server. The app talks to your battery and nothing else.
+- No telemetry or analytics. Update checks go only to the configured Sparkle feed.
 - Fixed 2-second polling and no animated power-flow visualization - AlDente's drain on the battery itself was the original motivation to write this.
-- Smaller in scope. No auto-update service, English-only UI, no telemetry, and no decorative background animation.
+- Smaller in scope. English-only UI, no telemetry, and no decorative background animation.
 
 ## Apple's native charge limit (macOS 26.4)
 
@@ -90,6 +90,27 @@ open OpenDente.xcodeproj
 ```
 
 `DEVELOPMENT_TEAM` in `project.yml` is set to my own team ID - change it to yours before building.
+
+## Updates and releases
+
+The Mac app embeds Sparkle 2 and checks the Tailnet-private stable feed once a day. Users can also run **Check for Updates…** from the app menu or General settings. Sparkle is started explicitly only when both an HTTPS feed and a real Ed25519 public key are present.
+
+Release builds are produced by Mac Deploy on the deploy Mac. Its private key and per-app configuration stay outside this repository under `~/.macdeploy`; the public verification key is committed in `OpenDente/Resources/Info.plist`.
+
+Before publishing, bump both `MARKETING_VERSION` and the numeric `CURRENT_PROJECT_VERSION` in `project.yml`, then commit and push. Validate and deploy with:
+
+```sh
+~/.macdeploy/venv/bin/python ~/.macdeploy/bin/macdeploy.py validate
+~/.macdeploy/venv/bin/python ~/.macdeploy/bin/macdeploy.py deploy OpenDente --channel stable
+```
+
+The stable feed is:
+
+```text
+https://sebastians-macbook-pro.tail76545e.ts.net/updates/OpenDente/stable/appcast.xml
+```
+
+Deployment performs a clean checkout, regenerates `OpenDente.xcodeproj` from `project.yml`, archives and exports the Developer ID build, creates the ZIP, signs the appcast with the deploy-only key, and writes it under `~/.macdeploy/releases/OpenDente/`. Do not commit the private key.
 
 ## Tests
 

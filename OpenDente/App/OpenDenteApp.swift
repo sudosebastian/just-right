@@ -8,5 +8,13 @@ struct OpenDenteApp: App {
         Settings {
             SettingsView()
         }
+        .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") {
+                    MacSparkleUpdater.shared.checkForUpdates()
+                }
+                .disabled(!MacSparkleUpdater.shared.isAvailable)
+            }
+        }
     }
 }

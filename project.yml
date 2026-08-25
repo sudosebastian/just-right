@@ -7,6 +7,11 @@ options:
   groupSortPosition: top
   generateEmptyDirectories: true
 
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.9.6
+
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -33,23 +38,47 @@ targets:
         CODE_SIGN_ENTITLEMENTS: OpenDente/Resources/OpenDente.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.opendente.app
         PRODUCT_NAME: OpenDente
-        MARKETING_VERSION: "0.2.0"
-        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "0.3.0"
+        CURRENT_PROJECT_VERSION: "2"
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: P4D7A49H95
+        DEVELOPMENT_TEAM: 8A4G7KXRPM
         ENABLE_HARDENED_RUNTIME: true
         COMBINE_HIDPI_IMAGES: true
     entitlements:
       path: OpenDente/Resources/OpenDente.entitlements
     dependencies:
       - target: OpenDenteHelper
-    postBuildScripts:
-      - name: "Bundle Helper & Stamp Version"
+      - package: Sparkle
+        product: Sparkle
+    # Grimnir/SMB can force 0700; Sparkle's executables must remain 0755.
+    postCompileScripts:
+      - name: "Normalize Sparkle Permissions"
+        basedOnDependencyAnalysis: false
         script: |
-          # Stamp build number with git commit hash
+          set -euo pipefail
+          APP="${TARGET_BUILD_DIR}/${FULL_PRODUCT_NAME}"
+          if [ -d "$APP" ]; then
+            find "$APP" -name '._*' -delete 2>/dev/null || true
+            find "$APP" -name '.DS_Store' -delete 2>/dev/null || true
+            /usr/bin/xattr -cr "$APP" 2>/dev/null || true
+            if [ -d "$APP/Contents/Frameworks/Sparkle.framework" ]; then
+              find "$APP/Contents/Frameworks/Sparkle.framework" \
+                \( -name Sparkle -o -name Autoupdate -o -name Updater -o -name Downloader -o -name Installer \) \
+                -type f -exec chmod 755 {} + 2>/dev/null || true
+            fi
+            if [ -d "$APP/Contents/MacOS" ]; then
+              find "$APP/Contents/MacOS" -type f -exec chmod 755 {} + 2>/dev/null || true
+            fi
+          fi
+    postBuildScripts:
+      - name: "Bundle Helper & Stamp Revision"
+        script: |
+          # Preserve the numeric CFBundleVersion Sparkle uses for update ordering,
+          # and record the source revision separately for diagnostics.
           PLIST="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
           GIT_HASH=$(git -C "${SRCROOT}" rev-parse --short HEAD 2>/dev/null || echo "dev")
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${GIT_HASH}" "${PLIST}"
+          /usr/libexec/PlistBuddy -c "Add :OpenDenteGitCommit string ${GIT_HASH}" "${PLIST}" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :OpenDenteGitCommit ${GIT_HASH}" "${PLIST}"
 
           # Copy helper tool into app bundle
           HELPER_TOOLS_DIR="${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Library/HelperTools"
@@ -80,7 +109,7 @@ targets:
         PRODUCT_NAME: com.opendente.helper
         SKIP_INSTALL: true
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: P4D7A49H95
+        DEVELOPMENT_TEAM: 8A4G7KXRPM
         ENABLE_HARDENED_RUNTIME: true
         CODE_SIGN_ENTITLEMENTS: OpenDenteHelper/OpenDenteHelper.entitlements
 
@@ -96,4 +125,4 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.opendente.tests
         GENERATE_INFOPLIST_FILE: true
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: P4D7A49H95
+        DEVELOPMENT_TEAM: 8A4G7KXRPM
