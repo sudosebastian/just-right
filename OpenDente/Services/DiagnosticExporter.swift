@@ -30,7 +30,7 @@ enum DiagnosticExporter {
         } catch {
             log.error("Failed to export diagnostic report: \(error.localizedDescription, privacy: .public)")
             let alert = NSAlert()
-            alert.messageText = "Export Failed"
+            alert.messageText = "The report could not be exported"
             alert.informativeText = error.localizedDescription
             alert.alertStyle = .warning
             alert.runModal()
@@ -61,8 +61,8 @@ enum DiagnosticExporter {
 
         r += "=== just-right diagnostic report ===\n"
         r += "Generated: \(iso.string(from: Date()))\n"
-        r += "App Version: \(appVersion) (\(buildNumber))\n"
-        r += "Helper Version: \(ChargingManager.shared.helperVersion ?? "unknown")\n"
+        r += "App version: \(appVersion) (\(buildNumber))\n"
+        r += "Helper version: \(ChargingManager.shared.helperVersion ?? "unknown")\n"
         r += "macOS: \(osStr)\n"
         r += "Model: \(model)\n"
         r += "\n"
@@ -74,9 +74,9 @@ enum DiagnosticExporter {
         let state = battery.batteryState
         let pct = state.effectivePercentage(useHardware: settings.useHardwareBatteryPercentage)
 
-        r += "=== Current State ===\n"
+        r += "=== Current state ===\n"
         r += "Mode: \(charging.mode.displayName)\n"
-        r += "Charge Limit: \(settings.chargeLimit)%\n"
+        r += "Charge limit: \(settings.chargeLimit)%\n"
 
         r += "Sailing: \(settings.sailingModeEnabled ? "on" : "off")"
         if settings.sailingModeEnabled {
@@ -84,7 +84,7 @@ enum DiagnosticExporter {
         }
         r += "\n"
 
-        r += "Heat Protection: \(settings.heatProtectionEnabled ? "on" : "off")"
+        r += "Heat protection: \(settings.heatProtectionEnabled ? "on" : "off")"
         if settings.heatProtectionEnabled {
             r += " (threshold: \(String(format: "%.1f", settings.heatProtectionTemp))°C)"
         }
@@ -106,7 +106,7 @@ enum DiagnosticExporter {
         }
         r += "Charging API: \(apiName)\n"
         r += "Helper: \(HelperInstaller.statusDescription)\n"
-        r += "SMC Available: \(battery.smcAvailable ? "Yes" : "No")\n"
+        r += "SMC available: \(battery.smcAvailable ? "yes" : "no")\n"
 
         if let reason = state.notChargingReason, reason != 0 {
             r += "NotChargingReason: 0x\(String(reason, radix: 16, uppercase: true))\n"
@@ -115,25 +115,25 @@ enum DiagnosticExporter {
             r += "ChargerInhibitReason: 0x\(String(reason, radix: 16, uppercase: true))\n"
         }
         if charging.systemChargeLimitConflict {
-            r += "System Charge Limit Conflict: YES\n"
+            r += "System charge limit conflict: yes\n"
         }
         r += "\n"
 
         // Settings
         r += "=== Settings ===\n"
-        r += "Automatic Discharge: \(settings.automaticDischarge ? "on" : "off")\n"
-        r += "Control MagSafe LED: \(settings.controlMagSafeLED ? "on" : "off")"
+        r += "Automatic discharge: \(settings.automaticDischarge ? "on" : "off")\n"
+        r += "Control MagSafe light: \(settings.controlMagSafeLED ? "on" : "off")"
         if settings.controlMagSafeLED {
             r += " (off when inactive: \(settings.magSafeLEDOffWhenInactive ? "on" : "off"))"
         }
         r += "\n"
-        r += "Stop Charging When Sleeping: \(settings.stopChargingWhenSleeping ? "on" : "off")\n"
-        r += "Disable Sleep Until Charge Limit: \(settings.disableSleepUntilChargeLimit ? "on" : "off")\n"
-        r += "Use Hardware Battery Percentage: \(settings.useHardwareBatteryPercentage ? "on" : "off")\n"
+        r += "Stop charging while sleeping: \(settings.stopChargingWhenSleeping ? "on" : "off")\n"
+        r += "Keep awake until charge limit: \(settings.disableSleepUntilChargeLimit ? "on" : "off")\n"
+        r += "Use hardware battery percentage: \(settings.useHardwareBatteryPercentage ? "on" : "off")\n"
         r += "\n"
 
         // Logs
-        r += "=== Logs (last 3 days) ===\n"
+        r += "=== Logs from the last 3 days ===\n"
         appendLogs(&r)
 
         return r

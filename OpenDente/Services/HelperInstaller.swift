@@ -66,9 +66,9 @@ enum HelperInstaller {
     static var statusDescription: String {
         switch service.status {
         case .enabled:          return "Enabled"
-        case .notRegistered:    return "Not Installed"
-        case .requiresApproval: return "Requires Approval"
-        case .notFound:         return "Not Found in Bundle"
+        case .notRegistered:    return "Not installed"
+        case .requiresApproval: return "Needs approval"
+        case .notFound:         return "Missing from the app"
         @unknown default:       return "Unknown"
         }
     }

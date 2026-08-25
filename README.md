@@ -4,14 +4,9 @@
 
 # just-right
 
-Battery charge limiter for macOS. Menu bar app - pick a target level (e.g. 80%), the system stops charging when it gets there.
+Battery charge limiter for macOS. Choose a target level, and the system stops charging when it gets there.
 
-Open-source alternative to AlDente, GPL-3 licensed. Built to stay out of the way: 2-second SMC poll, no animated UI in the background, no telemetry.
-
-<p align="center">
-  <img src="screenshots/popover.png" width="280" alt="Sailing mode">
-  <img src="screenshots/popover-detailed.png" width="280" alt="Detailed view with full SMC and adapter info">
-</p>
+Open-source alternative to AlDente, GPL-3 licensed. Built to stay out of the way with a 2-second SMC poll, no background animation, and no telemetry.
 
 ## Status
 
@@ -25,32 +20,32 @@ The app writes to the SMC. It tries to fail safe (charging is restored on quit, 
 
 Core charging features overlap with what AlDente puts behind its Pro tier: charge limit, sailing mode, heat protection, force discharge, MagSafe LED control, sleep handling, scheduled top ups, and battery calibration.
 
-What's different here:
+What is different here:
 
 - Open source, GPL-3. No Pro tier, no paywalled features.
 - No telemetry or analytics. Update checks go only to the configured Sparkle feed.
-- Fixed 2-second polling and no animated power-flow visualization - AlDente's drain on the battery itself was the original motivation to write this.
+- Fixed 2-second polling and no animated power-flow visualization. AlDente's battery drain was the original motivation to write this.
 - Smaller in scope. English-only UI, no telemetry, and no decorative background animation.
 
 ## Apple's native charge limit (macOS 26.4)
 
-In macOS 26.4, Apple shipped their own charge limit in System Settings → Battery (80% up to 100% in 5% steps). just-right works fine alongside it, system limit on or off.
+In macOS 26.4, Apple shipped its own charge limit in System Settings → Battery, from 80% to 100% in 5% steps. just-right works alongside it whether the system limit is on or off.
 
-The two are independent firmware gates - both have to be open for charging to happen, so the effective ceiling is whichever is lower. There is no fight loop and no override cycle: set the system to 90% and just-right to 80%, you get 80%. Turn the system limit off, just-right still works on its own.
+The two are independent firmware gates. Both have to be open for charging to happen, so the effective ceiling is whichever is lower. Set the system to 90% and just-right to 80%, and you get 80%. Turn the system limit off, and just-right still works on its own.
 
 just-right also detects when it's the system limit (rather than its own write) that's blocking charging, via `NotChargingReason` bit 24, and labels it in the popover so it's clear which gate is holding the line.
 
 ## Features
 
 - Charge limit, 50–100%
-- Sailing mode - let the battery drain to a lower threshold before topping up, instead of trickle-charging at the cap
-- Force discharge while plugged in
-- Heat protection - pause charging above a configurable temperature
-- Sleep handling - stop charging during sleep; optionally inhibit sleep until the limit is reached
+- Sailing mode. Let the battery drain to a lower threshold before charging again.
+- Force discharge while plugged in.
+- Heat protection. Pause charging above a configurable temperature.
+- Sleep handling. Stop charging during sleep, or keep the Mac awake until the limit is reached.
 - MagSafe LED reflects actual charging state
 - Per-event native notifications
-- Scheduled top ups on selected weekdays
-- Four-stage battery calibration (charge, hold, discharge, recharge) that resumes after a restart
+- Scheduled full charges on selected weekdays.
+- Four-stage battery calibration that resumes after a restart.
 - One-click 60%, 70%, 80%, 90%, and 100% charge-limit presets
 
 ## What it shows

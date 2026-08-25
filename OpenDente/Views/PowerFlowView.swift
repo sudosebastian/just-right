@@ -101,7 +101,7 @@ struct PowerFlowView: View {
                     flowBar(
                         label: String(format: "%.1f W", battery.batteryPower ?? 0),
                         icon: "battery.100percent.bolt",
-                        color: .green,
+                        color: JustRightTheme.accent,
                         proportion: batteryProportion(battery.batteryPower ?? 0)
                     )
                 }
@@ -110,7 +110,7 @@ struct PowerFlowView: View {
                     flowBar(
                         label: "Charging",
                         icon: "battery.100percent.bolt",
-                        color: .green,
+                        color: JustRightTheme.accent,
                         proportion: 0.1
                     )
                 }
@@ -120,31 +120,27 @@ struct PowerFlowView: View {
                 pluggedInAdapterView {
                     let bp = battery.batteryPower ?? 0
                     let label = bp > 0.1
-                        ? String(format: "Stopping\u{2026} %.1f W", bp)
-                        : "Stopping\u{2026}"
+                        ? String(format: "Stopping at %.1f W", bp)
+                        : "Stopping"
                     flowBar(
                         label: label,
                         icon: "stop.circle",
-                        color: .orange,
+                        color: JustRightTheme.warning,
                         proportion: bp > 0.1 ? batteryProportion(bp) : 0.3
                     )
                 }
             case .pluggedInStarting:
                 pluggedInAdapterView {
                     flowBar(
-                        label: "Starting\u{2026}",
+                        label: "Starting",
                         icon: "battery.100percent.bolt",
-                        color: .green,
+                        color: JustRightTheme.accent,
                         proportion: 0.1
                     )
                 }
             }
         }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
-        )
+        .accessibilityElement(children: .contain)
     }
 
     // MARK: - No Data View
@@ -154,9 +150,9 @@ struct PowerFlowView: View {
             Image(systemName: battery.isPluggedIn ? "bolt.fill" : "battery.75percent")
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 2) {
-                Text(battery.isPluggedIn ? "Plugged In" : "On Battery")
+                Text(battery.isPluggedIn ? "Connected to power" : "Running on battery")
                     .font(.system(size: 11, weight: .medium))
-                Text("Power data requires SMC access")
+                Text("Detailed power needs SMC access")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
             }
@@ -178,7 +174,7 @@ struct PowerFlowView: View {
                     flowBar(
                         label: String(format: "%.1f W", systemPower),
                         icon: "laptopcomputer",
-                        color: .blue,
+                        color: .secondary,
                         proportion: systemProportion
                     )
                 }
@@ -206,7 +202,7 @@ struct PowerFlowView: View {
                     flowBar(
                         label: String(format: "%.1f W", adapterPower),
                         icon: "laptopcomputer",
-                        color: .blue,
+                        color: .secondary,
                         proportion: adapterShare.clamped(to: 0.1...1.0)
                     )
                 }
@@ -236,7 +232,7 @@ struct PowerFlowView: View {
                     flowBar(
                         label: String(format: "%.1f W", systemPower),
                         icon: "laptopcomputer",
-                        color: .orange,
+                        color: JustRightTheme.warning,
                         proportion: 1.0
                     )
                 } else if let bp = battery.batteryPower, abs(bp) > 0.1 {
@@ -244,14 +240,14 @@ struct PowerFlowView: View {
                     flowBar(
                         label: String(format: "%.1f W", abs(bp)),
                         icon: "laptopcomputer",
-                        color: .orange,
+                        color: JustRightTheme.warning,
                         proportion: 1.0
                     )
                 } else {
                     flowBar(
                         label: "Discharging",
                         icon: "laptopcomputer",
-                        color: .orange,
+                        color: JustRightTheme.warning,
                         proportion: 1.0
                     )
                 }
@@ -279,15 +275,15 @@ struct PowerFlowView: View {
         HStack(spacing: 6) {
             Image(systemName: "arrow.right")
                 .font(.system(size: 8))
-                .foregroundStyle(color.opacity(0.6))
+                .foregroundStyle(color)
 
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(color.opacity(0.15))
+                    RoundedRectangle(cornerRadius: JustRightTheme.Radius.small)
+                        .fill(JustRightTheme.subtleFill)
 
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(color.opacity(0.4))
+                    RoundedRectangle(cornerRadius: JustRightTheme.Radius.small)
+                        .fill(color.opacity(0.72))
                         .frame(width: max(geo.size.width * proportion, 20))
                 }
                 .overlay(
@@ -309,7 +305,7 @@ struct PowerFlowView: View {
 
     private var adapterWattsText: String {
         if let adapter = battery.adapterPower, adapter > 0.1 {
-            return String(format: "%.0fW", adapter)
+            return String(format: "%.0f W", adapter)
         }
         return "AC"
     }

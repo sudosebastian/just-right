@@ -111,7 +111,7 @@ final class DisplayLogicTests: XCTestCase {
         let result = ChargingMode.topUp.timeRemainingDisplay(
             chargeLimit: 80, percentage: 85, timeToFull: 30, timeToEmpty: nil
         )
-        XCTAssertEqual(result?.label, "Time to Full")
+        XCTAssertEqual(result?.label, "Time to full")
         XCTAssertEqual(result?.value, "30m")
     }
 
@@ -119,7 +119,7 @@ final class DisplayLogicTests: XCTestCase {
         let result = ChargingMode.topUp.timeRemainingDisplay(
             chargeLimit: 80, percentage: 100, timeToFull: 0, timeToEmpty: nil
         )
-        XCTAssertEqual(result?.label, "Time to Full")
+        XCTAssertEqual(result?.label, "Time to full")
         XCTAssertEqual(result?.value, "Charged")
     }
 
@@ -136,7 +136,7 @@ final class DisplayLogicTests: XCTestCase {
         let result = ChargingMode.discharging.timeRemainingDisplay(
             chargeLimit: 80, percentage: 50, timeToFull: nil, timeToEmpty: 150
         )
-        XCTAssertEqual(result?.label, "Time Remaining")
+        XCTAssertEqual(result?.label, "Time remaining")
         XCTAssertEqual(result?.value, "2h 30m")
     }
 
@@ -144,7 +144,7 @@ final class DisplayLogicTests: XCTestCase {
         let result = ChargingMode.onBattery.timeRemainingDisplay(
             chargeLimit: 80, percentage: 50, timeToFull: nil, timeToEmpty: 45
         )
-        XCTAssertEqual(result?.label, "Time Remaining")
+        XCTAssertEqual(result?.label, "Time remaining")
         XCTAssertEqual(result?.value, "45m")
     }
 
@@ -168,7 +168,7 @@ final class DisplayLogicTests: XCTestCase {
         let result = ChargingMode.paused.timeRemainingDisplay(
             chargeLimit: 80, percentage: 80, timeToFull: nil, timeToEmpty: nil
         )
-        XCTAssertEqual(result?.label, "Time Remaining")
+        XCTAssertEqual(result?.label, "Time remaining")
         XCTAssertEqual(result?.value, "–")
     }
 
@@ -183,7 +183,7 @@ final class DisplayLogicTests: XCTestCase {
         let result = ChargingMode.heatProtection.timeRemainingDisplay(
             chargeLimit: 80, percentage: 50, timeToFull: nil, timeToEmpty: nil
         )
-        XCTAssertEqual(result?.label, "Time Remaining")
+        XCTAssertEqual(result?.label, "Time remaining")
         XCTAssertEqual(result?.value, "Paused")
     }
 

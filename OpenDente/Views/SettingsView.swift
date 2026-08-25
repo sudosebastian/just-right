@@ -3,34 +3,153 @@ import ServiceManagement
 import UserNotifications
 import os.log
 
-/// Settings window with tabbed interface
+/// Settings use stable, task-based navigation. Feature pages keep their own
+/// complexity, while the shell provides one hierarchy and one visual rhythm.
 struct SettingsView: View {
+    @State private var destination: SettingsDestination = .general
+
     var body: some View {
-        TabView {
-            GeneralTab()
-                .tabItem { Label("General", systemImage: "gear") }
-
-            ChargingTab()
-                .tabItem { Label("Charging", systemImage: "bolt.fill") }
-
-            AutomationTab()
-                .tabItem { Label("Automation", systemImage: "calendar.badge.clock") }
-
-            NotificationsTab()
-                .tabItem { Label("Notifications", systemImage: "bell") }
-
-            StatusBarTab()
-                .tabItem { Label("Status Bar", systemImage: "menubar.rectangle") }
-
-            PopoverItemsTab()
-                .tabItem { Label("Popover", systemImage: "list.bullet") }
-
-            BatteryInfoTab()
-                .tabItem { Label("Battery", systemImage: "battery.100percent") }
+        HStack(spacing: 0) {
+            settingsSidebar
+                .frame(width: 184)
+            Rectangle()
+                .fill(JustRightTheme.line.opacity(0.7))
+                .frame(width: 1)
+            settingsContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .tint(JustRightTheme.accent)
-        .frame(width: 560)
-        .frame(minHeight: 520)
+        .frame(width: 800, height: 620)
+        .justRightCanvas()
+    }
+
+    private var settingsSidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: JustRightTheme.Space.x3) {
+                JustRightMark(size: 28)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("just-right")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(versionText)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, JustRightTheme.Space.x4)
+            .padding(.top, JustRightTheme.Space.x6)
+            .padding(.bottom, JustRightTheme.Space.x6)
+
+            sidebarGroup("Essentials", destinations: [.general, .charging, .automation])
+            sidebarGroup("Experience", destinations: [.notifications, .menuBar, .panel])
+            sidebarGroup("System", destinations: [.battery])
+
+            Spacer()
+        }
+        .background(JustRightTheme.surface)
+    }
+
+    private func sidebarGroup(_ title: String, destinations: [SettingsDestination]) -> some View {
+        VStack(alignment: .leading, spacing: JustRightTheme.Space.x1) {
+            Text(title)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, JustRightTheme.Space.x4)
+                .padding(.top, JustRightTheme.Space.x3)
+                .accessibilityAddTraits(.isHeader)
+
+            ForEach(destinations) { item in
+                Button {
+                    destination = item
+                } label: {
+                    HStack(spacing: JustRightTheme.Space.x3) {
+                        Image(systemName: item.icon)
+                            .font(.system(size: 12, weight: .medium))
+                            .frame(width: 16)
+                        Text(item.title)
+                            .font(.system(size: 12, weight: destination == item ? .semibold : .regular))
+                        Spacer()
+                    }
+                    .foregroundStyle(destination == item ? Color.primary : Color.secondary)
+                    .padding(.horizontal, JustRightTheme.Space.x3)
+                    .frame(height: 32)
+                    .background(
+                        RoundedRectangle(cornerRadius: JustRightTheme.Radius.small)
+                            .fill(destination == item ? JustRightTheme.subtleFill : Color.clear)
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(destination == item ? [.isSelected] : [])
+            }
+        }
+        .padding(.horizontal, JustRightTheme.Space.x1)
+    }
+
+    @ViewBuilder
+    private var settingsContent: some View {
+        VStack(alignment: .leading, spacing: JustRightTheme.Space.x4) {
+            JRPageHeader(title: destination.title, detail: destination.detail)
+                .padding(.horizontal, JustRightTheme.Space.x8)
+                .padding(.top, JustRightTheme.Space.x8)
+
+            switch destination {
+            case .general: GeneralTab()
+            case .charging: ChargingTab()
+            case .automation: AutomationTab()
+            case .notifications: NotificationsTab()
+            case .menuBar: StatusBarTab()
+            case .panel: PopoverItemsTab()
+            case .battery: BatteryInfoTab()
+            }
+        }
+        .background(JustRightTheme.canvas)
+    }
+
+    private var versionText: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
+        return "v\(version) · \(build)"
+    }
+}
+
+private enum SettingsDestination: String, Identifiable, CaseIterable {
+    case general, charging, automation, notifications, menuBar, panel, battery
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .general: "General"
+        case .charging: "Charge"
+        case .automation: "Automation"
+        case .notifications: "Notifications"
+        case .menuBar: "Menu bar"
+        case .panel: "Panel"
+        case .battery: "Battery data"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .general: "Start just-right, manage its helper, and keep the app current."
+        case .charging: "Set the limit and choose how just-right protects the battery."
+        case .automation: "Schedule a full charge or run a battery calibration."
+        case .notifications: "Choose which battery events can interrupt you."
+        case .menuBar: "Choose the measurements visible beside the menu-bar icon."
+        case .panel: "Choose and order the measurements in the daily control panel."
+        case .battery: "Inspect measured values and export a report for troubleshooting."
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .general: "gearshape"
+        case .charging: "battery.75percent"
+        case .automation: "calendar.badge.clock"
+        case .notifications: "bell"
+        case .menuBar: "menubar.rectangle"
+        case .panel: "rectangle.topthird.inset.filled"
+        case .battery: "waveform.path.ecg"
+        }
     }
 }
 
@@ -43,7 +162,7 @@ struct GeneralTab: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Launch at Login", isOn: $settings.launchAtLogin)
+                Toggle("Launch at login", isOn: $settings.launchAtLogin)
                     .onChange(of: settings.launchAtLogin) { _, newValue in
                         setLaunchAtLogin(newValue)
                     }
@@ -58,28 +177,31 @@ struct GeneralTab: View {
                         .textSelection(.enabled)
                 }
 
-                Button("Check for Updates…") {
+                Button("Check for updates...") {
                     MacSparkleUpdater.shared.checkForUpdates()
                 }
                 .disabled(!MacSparkleUpdater.shared.isAvailable)
             }
 
-            Section("Privileged Helper") {
+            Section("Privileged helper") {
                 LabeledContent("Status") {
                     Text(HelperInstaller.statusDescription)
-                        .foregroundStyle(charging.isHelperInstalled ? .green : .orange)
+                        .foregroundStyle(charging.isHelperInstalled ? JustRightTheme.accent : JustRightTheme.warning)
                 }
 
                 if !charging.isHelperInstalled {
                     helperActions
 
-                    Text("The helper daemon is required for charging control. It runs as root to write SMC keys.")
+                    Text("The helper runs with system access so it can change the charging state.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
         }
-        .formStyle(.grouped)
+        .formStyle(.columns)
+        .scrollContentBackground(.hidden)
+        .padding(.horizontal, JustRightTheme.Space.x8)
+        .padding(.bottom, JustRightTheme.Space.x6)
     }
 
     @ViewBuilder
@@ -89,11 +211,11 @@ struct GeneralTab: View {
             Button("Open System Settings") {
                 HelperInstaller.openSystemSettings()
             }
-            Text("Toggle just-right ON in Login Items to approve the helper.")
+            Text("Turn on just-right under Allow in the Background.")
                 .font(.caption)
-                .foregroundStyle(.orange)
+                .foregroundStyle(JustRightTheme.warning)
         } else {
-            Button("Install Helper") {
+            Button("Install helper") {
                 if HelperInstaller.register() {
                     charging.connectToHelper()
                 }
@@ -122,33 +244,36 @@ struct NotificationsTab: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Enable Notifications", isOn: $settings.showNotifications)
+                Toggle("Allow notifications", isOn: $settings.showNotifications)
             }
 
             Section("Events") {
-                Toggle("Charge Limit Reached", isOn: $settings.notifyChargeLimitReached)
-                Toggle("Top Up Complete (100%)", isOn: $settings.notifyTopUpComplete)
-                Toggle("Heat Protection Active", isOn: $settings.notifyHeatProtection)
-                Toggle("Discharge Complete", isOn: $settings.notifyDischargeComplete)
+                Toggle("Charge limit reached", isOn: $settings.notifyChargeLimitReached)
+                Toggle("Full charge complete", isOn: $settings.notifyTopUpComplete)
+                Toggle("Heat protection active", isOn: $settings.notifyHeatProtection)
+                Toggle("Discharge complete", isOn: $settings.notifyDischargeComplete)
             }
             .disabled(!settings.showNotifications)
 
             #if DEBUG
             Section("Test") {
-                Button("Send Test Notification") {
+                Button("Send test notification") {
                     sendTestNotification()
                 }
             }
             #endif
         }
-        .formStyle(.grouped)
+        .formStyle(.columns)
+        .scrollContentBackground(.hidden)
+        .padding(.horizontal, JustRightTheme.Space.x8)
+        .padding(.bottom, JustRightTheme.Space.x6)
     }
 
     #if DEBUG
     private func sendTestNotification() {
         let content = UNMutableNotificationContent()
         content.title = "just-right test"
-        content.body = "Notifications are working!"
+        content.body = "Notifications are working."
         content.sound = .default
 
         let request = UNNotificationRequest(
@@ -211,7 +336,7 @@ struct ChargingTab: View {
                             .font(.system(.body, design: .monospaced))
                             .frame(width: 35, alignment: .trailing)
                     }
-                    Text("Won't recharge until battery drops to \(settings.sailingLowerBound)%")
+                    Text("Charging resumes when the battery reaches \(settings.sailingLowerBound)%.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -241,33 +366,36 @@ struct ChargingTab: View {
                 }
             }
 
-            Section("Other") {
+            Section("System behavior") {
                 Toggle("Automatic discharge", isOn: $settings.automaticDischarge)
                 Toggle("Control MagSafe LED", isOn: $settings.controlMagSafeLED)
                 if settings.controlMagSafeLED {
                     Toggle("Turn off LED when not charging", isOn: $settings.magSafeLEDOffWhenInactive)
                         .padding(.leading, 16)
-                    Text("Off when limit reached/sailing, orange when charging. Otherwise green/orange.")
+                    Text("The light turns off while holding or sailing, and orange while charging.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .padding(.leading, 16)
                 } else {
-                    Text("Orange when charging, green when limit reached. Requires MagSafe.")
+                    Text("The light is orange while charging and green at the limit. This setting needs MagSafe.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Toggle("Stop charging when sleeping", isOn: $settings.stopChargingWhenSleeping)
-                Text("Inhibits charging before sleep so the battery stays at its current level.")
+                Text("Pause charging before the Mac sleeps.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Toggle("Keep awake until charge limit", isOn: $settings.disableSleepUntilChargeLimit)
-                Text("Keeps Mac awake while charging or discharging toward the limit.")
+                Text("Keep the Mac awake while it moves toward the charge limit.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Toggle("Use hardware battery percentage", isOn: $settings.useHardwareBatteryPercentage)
             }
         }
-        .formStyle(.grouped)
+        .formStyle(.columns)
+        .scrollContentBackground(.hidden)
+        .padding(.horizontal, JustRightTheme.Space.x8)
+        .padding(.bottom, JustRightTheme.Space.x6)
     }
 }
 
@@ -322,12 +450,12 @@ struct AutomationTab: View {
                         .font(.caption)
                         .foregroundStyle(JustRightTheme.warning)
                 } else if settings.scheduledTopUpEnabled, let nextTopUp {
-                    Text("Next top up: \(nextTopUp.formatted(date: .abbreviated, time: .shortened))")
+                    Text("Next full charge: \(nextTopUp.formatted(date: .abbreviated, time: .shortened))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
-                Text("just-right starts within 15 minutes of the set time. The Mac must be awake and connected to power.")
+                Text("The full charge starts within 15 minutes of this time. The Mac must be awake and connected to power.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -357,12 +485,15 @@ struct AutomationTab: View {
                     .disabled(!charging.isHelperInstalled || charging.chargingAPI == .unknown)
                 }
 
-                Text("Calibration charges to 100%, holds for one hour, discharges to 15%, then recharges to 100%. It can take several hours and keeps the Mac awake while running.")
+                Text("Calibration charges to 100%, waits for one hour, discharges to 15%, and charges to 100% again. It can take several hours and keeps the Mac awake.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
+        .formStyle(.columns)
+        .scrollContentBackground(.hidden)
+        .padding(.horizontal, JustRightTheme.Space.x8)
+        .padding(.bottom, JustRightTheme.Space.x6)
     }
 
     private func weekdayButton(_ weekday: Int) -> some View {
@@ -394,15 +525,15 @@ struct StatusBarTab: View {
 
     var body: some View {
         Form {
-            Section("Show in Status Bar") {
-                Toggle("Battery Percentage", isOn: $settings.statusBarShowPercentage)
+            Section("Visible measurements") {
+                Toggle("Battery percentage", isOn: $settings.statusBarShowPercentage)
                 Toggle("Temperature", isOn: $settings.statusBarShowTemperature)
-                Toggle("Power Usage", isOn: $settings.statusBarShowPower)
-                Toggle("Charging Mode Icon", isOn: $settings.statusBarShowMode)
+                Toggle("Power use", isOn: $settings.statusBarShowPower)
+                Toggle("Charging state icon", isOn: $settings.statusBarShowMode)
             }
 
             Section {
-                Text("Preview:")
+                Text("Preview")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 HStack(spacing: 6) {
@@ -415,12 +546,19 @@ struct StatusBarTab: View {
                 }
                 .padding(8)
                 .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color(nsColor: .controlBackgroundColor))
+                    RoundedRectangle(cornerRadius: JustRightTheme.Radius.small)
+                        .fill(JustRightTheme.surface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: JustRightTheme.Radius.small)
+                        .stroke(JustRightTheme.line, lineWidth: 1)
                 )
             }
         }
-        .formStyle(.grouped)
+        .formStyle(.columns)
+        .scrollContentBackground(.hidden)
+        .padding(.horizontal, JustRightTheme.Space.x8)
+        .padding(.bottom, JustRightTheme.Space.x6)
     }
 
     private var statusBarIcon: String {
@@ -452,17 +590,16 @@ struct PopoverItemsTab: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("Drag to reorder. Toggle to show/hide.")
+            Text("Drag visible measurements to reorder them. Use the eye button to show or hide a measurement.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 6)
+                .padding(.horizontal, JustRightTheme.Space.x8)
+                .padding(.bottom, JustRightTheme.Space.x3)
 
             List {
                 Section {
-                    Toggle("Show Power Flow", isOn: $settings.showPowerFlow)
+                    Toggle("Show power flow", isOn: $settings.showPowerFlow)
                 }
 
                 Section("Visible") {
@@ -485,6 +622,9 @@ struct PopoverItemsTab: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .padding(.horizontal, JustRightTheme.Space.x6)
+            .padding(.bottom, JustRightTheme.Space.x6)
         }
         .onAppear { load() }
     }
@@ -518,7 +658,7 @@ struct PopoverItemRow: View {
     let onToggle: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: JustRightTheme.Space.x3) {
             Image(systemName: item.icon)
                 .font(.system(size: 12))
                 .foregroundStyle(isEnabled ? .primary : .secondary)
@@ -532,9 +672,10 @@ struct PopoverItemRow: View {
             Button(action: onToggle) {
                 Image(systemName: isEnabled ? "eye.fill" : "eye.slash")
                     .font(.system(size: 12))
-                    .foregroundStyle(isEnabled ? .blue : .secondary)
+                    .foregroundStyle(isEnabled ? JustRightTheme.accent : .secondary)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("\(isEnabled ? "Hide" : "Show") \(item.displayName)")
         }
     }
 }
@@ -552,43 +693,43 @@ struct BatteryInfoTab: View {
 
         Form {
             Section("Battery") {
-                infoRow("macOS Percentage", value: "\(state.percentage)%")
+                infoRow("macOS percentage", value: "\(state.percentage)%")
                 validatedRow("Hardware SoC", raw: state.hardwarePercentage, format: { "\($0)%" })
                 if let current = state.currentCapacity, let max = state.maxCapacity {
                     validatedRow("Capacity", value: "\(current) / \(max) mAh",
                                  warn: max < 500 || max > 20000 || current < 0 || current > max * 11 / 10)
                 }
-                validatedRow("Design Capacity", raw: state.designCapacity, format: { "\($0) mAh" },
+                validatedRow("Design capacity", raw: state.designCapacity, format: { "\($0) mAh" },
                              warn: { $0 < 500 || $0 > 20000 })
                 if let health = state.healthPercentage {
                     validatedRow("Health", value: String(format: "%.1f%%", health),
                                  warn: health < 0 || health > 120)
                 }
-                validatedRow("Cycle Count", raw: state.cycleCount, format: { "\($0)" },
+                validatedRow("Cycle count", raw: state.cycleCount, format: { "\($0)" },
                              warn: { $0 < 0 || $0 >= 10000 })
                 validatedRow("Temperature", raw: state.temperature,
                              format: { TemperatureDisplay.format($0) },
                              warn: { $0 < -20 || $0 > 100 })
             }
 
-            Section("Battery Power") {
+            Section("Battery power") {
                 infoRow("Source", value: state.powerSource)
-                validatedRow("Battery Voltage", raw: state.voltage,
+                validatedRow("Battery voltage", raw: state.voltage,
                              format: { String(format: "%.2f V", $0) },
                              warn: { $0 < 1 || $0 > 30 })
-                validatedRow("Battery Current", raw: state.amperage,
+                validatedRow("Battery current", raw: state.amperage,
                              format: { String(format: "%.3f A", $0) },
                              warn: { abs($0) > 10 })
-                validatedRow("Battery Power", raw: state.batteryPower,
+                validatedRow("Battery power", raw: state.batteryPower,
                              format: { String(format: "%.1f W", $0) },
                              warn: { abs($0) > 200 })
             }
 
-            Section("System Power") {
-                validatedRow("System Power", raw: state.systemPower,
+            Section("System power") {
+                validatedRow("System power", raw: state.systemPower,
                              format: { String(format: "%.1f W", $0) },
                              warn: { $0 < 0 || $0 > 200 })
-                validatedRow("Adapter Power", raw: state.adapterPower,
+                validatedRow("Adapter power", raw: state.adapterPower,
                              format: { String(format: "%.1f W", $0) },
                              warn: { $0 < 0 || $0 > 200 })
             }
@@ -627,7 +768,7 @@ struct BatteryInfoTab: View {
                 }
 
                 if !adapter.usbPDProfiles.isEmpty {
-                    Section("USB-PD Profiles") {
+                    Section("USB-PD profiles") {
                         ForEach(Array(adapter.usbPDProfiles.enumerated()), id: \.offset) { index, profile in
                             HStack {
                                 Text(String(format: "%.0fV \u{00D7} %.2fA (%dW)",
@@ -636,7 +777,7 @@ struct BatteryInfoTab: View {
                                 Spacer()
                                 if index == adapter.activeProfileIndex {
                                     Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(.green)
+                                        .foregroundStyle(JustRightTheme.accent)
                                 }
                             }
                         }
@@ -645,7 +786,7 @@ struct BatteryInfoTab: View {
 
                 if let reason = state.notChargingReason, reason != 0 {
                     Section {
-                        infoRow("Not Charging Reason", value: String(format: "0x%016llX", reason))
+                        infoRow("Not charging reason", value: String(format: "0x%016llX", reason))
                     }
                 }
             }
@@ -656,22 +797,25 @@ struct BatteryInfoTab: View {
                 if settings.controlMagSafeLED {
                     infoRow("MagSafe LED", value: ledColorName)
                 }
-                infoRow("SMC Available", value: battery.smcAvailable ? "Yes" : "No")
+                infoRow("SMC available", value: battery.smcAvailable ? "Yes" : "No")
                 if let version = charging.helperVersion {
-                    infoRow("Helper Version", value: version)
+                    infoRow("Helper version", value: version)
                 }
             }
 
             Section {
-                Button("Export Diagnostic Report...") {
+                Button("Export diagnostic report...") {
                     DiagnosticExporter.exportWithSavePanel()
                 }
-                Text("Exports system info, current state, settings, and recent logs as a text file for troubleshooting.")
+                Text("Save system information, battery state, settings, and recent logs as a text file.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
+        .formStyle(.columns)
+        .scrollContentBackground(.hidden)
+        .padding(.horizontal, JustRightTheme.Space.x8)
+        .padding(.bottom, JustRightTheme.Space.x6)
     }
 
     private var chargingAPIName: String {

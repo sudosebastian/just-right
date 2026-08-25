@@ -10,7 +10,7 @@ struct JustRightApp: App {
         }
         .commands {
             CommandGroup(after: .appInfo) {
-                Button("Check for Updates…") {
+                Button("Check for updates...") {
                     MacSparkleUpdater.shared.checkForUpdates()
                 }
                 .disabled(!MacSparkleUpdater.shared.isAvailable)

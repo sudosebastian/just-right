@@ -127,6 +127,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let state = battery.batteryState
         let pct = state.effectivePercentage(useHardware: settings.useHardwareBatteryPercentage)
+        button.setAccessibilityLabel("Battery \(pct) percent. \(charging.mode.displayName).")
+        button.toolTip = "Battery \(pct)% · \(charging.mode.displayName)"
 
         let iconName = settings.statusBarShowMode
             ? charging.mode.batteryIconName(percentage: pct, isCharging: state.isCharging)
@@ -150,7 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupPopover() {
         popover = NSPopover()
-        popover.contentSize = NSSize(width: 360, height: 520)
+        popover.contentSize = NSSize(width: 392, height: 600)
         popover.behavior = .transient
         popover.animates = false
         popover.contentViewController = NSHostingController(rootView: PopoverView())

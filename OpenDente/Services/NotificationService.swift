@@ -76,23 +76,23 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         let content = UNMutableNotificationContent()
         switch event {
         case .chargeLimitReached:
-            content.title = "Charge Limit Reached"
-            content.body = "Battery has reached your charge limit. Charging paused."
+            content.title = "Charge limit reached"
+            content.body = "Charging paused at your limit."
         case .topUpComplete:
-            content.title = "Top Up Complete"
-            content.body = "Battery is fully charged at 100%."
+            content.title = "Full charge complete"
+            content.body = "The battery reached 100%."
         case .heatProtection:
-            content.title = "Heat Protection Active"
-            content.body = "Charging paused due to high battery temperature."
+            content.title = "Heat protection active"
+            content.body = "Charging paused because the battery is hot."
         case .dischargeComplete:
-            content.title = "Discharge Complete"
-            content.body = "Battery has discharged to your charge limit."
+            content.title = "Discharge complete"
+            content.body = "The battery reached your charge limit."
         case .systemChargeLimitConflict:
-            content.title = "System Charge Limit Active"
-            content.body = "macOS Charge Limit is preventing charging. Lower it in System Settings > Battery."
+            content.title = "macOS is limiting the charge"
+            content.body = "Turn off Charge Limit in Battery settings so just-right can charge."
         case .inhibitFailed:
-            content.title = "Charging Control Failed"
-            content.body = "Unable to stop charging. Try unplugging and re-plugging the charger."
+            content.title = "Charging did not stop"
+            content.body = "Unplug the charger, then connect it again."
         }
         content.sound = .default
 

@@ -127,13 +127,13 @@ enum ChargingMode: String, CaseIterable {
     var displayName: String {
         switch self {
         case .charging:       return "Charging"
-        case .paused:         return "Charge Limit Reached"
+        case .paused:         return "Charge limit reached"
         case .sailing:        return "Sailing"
         case .discharging:    return "Discharging"
-        case .topUp:          return "Topping Up"
+        case .topUp:          return "Topping up"
         case .calibrating:    return "Calibrating"
-        case .heatProtection: return "Heat Protection"
-        case .onBattery:      return "On Battery"
+        case .heatProtection: return "Heat protection"
+        case .onBattery:      return "On battery"
         case .idle:           return "Idle"
         }
     }
@@ -162,24 +162,24 @@ enum ChargingMode: String, CaseIterable {
 
         case .topUp:
             if percentage >= 100 {
-                return ("Time to Full", "Charged")
+                return ("Time to full", "Charged")
             }
             guard let ttf = timeToFull, ttf > 0, ttf < 6000 else {
-                return ("Time to Full", "Calculating…")
+                return ("Time to full", "Calculating…")
             }
-            return ("Time to Full", BatteryState.formatMinutes(ttf))
+            return ("Time to full", BatteryState.formatMinutes(ttf))
 
         case .discharging, .onBattery:
             guard let tte = timeToEmpty, tte > 0, tte < 6000 else {
-                return ("Time Remaining", "Calculating…")
+                return ("Time remaining", "Calculating…")
             }
-            return ("Time Remaining", BatteryState.formatMinutes(tte))
+            return ("Time remaining", BatteryState.formatMinutes(tte))
 
         case .paused, .sailing:
-            return ("Time Remaining", "–")
+            return ("Time remaining", "–")
 
         case .heatProtection:
-            return ("Time Remaining", "Paused")
+            return ("Time remaining", "Paused")
 
         case .idle, .calibrating:
             return nil
@@ -241,23 +241,23 @@ enum PopoverDetailItem: String, CaseIterable, Codable, Identifiable {
     var displayName: String {
         switch self {
         case .temperature:         return "Temperature"
-        case .batteryHealth:       return "Battery Health"
-        case .cycleCount:          return "Cycle Count"
-        case .timeRemaining:       return "Time Remaining"
-        case .systemPower:         return "System Power"
-        case .adapterPower:        return "Adapter Power"
+        case .batteryHealth:       return "Battery health"
+        case .cycleCount:          return "Cycle count"
+        case .timeRemaining:       return "Time remaining"
+        case .systemPower:         return "System power"
+        case .adapterPower:        return "Adapter power"
         case .adapterName:         return "Adapter"
         case .adapterManufacturer: return "Manufacturer"
-        case .adapterModel:       return "Adapter Model"
-        case .adapterSerial:       return "Adapter Serial"
-        case .adapterVoltage:      return "Adapter Voltage"
-        case .adapterCurrent:      return "Adapter Current"
-        case .voltage:             return "Battery Voltage"
-        case .amperage:            return "Battery Current"
+        case .adapterModel:        return "Adapter model"
+        case .adapterSerial:       return "Adapter serial number"
+        case .adapterVoltage:      return "Adapter voltage"
+        case .adapterCurrent:      return "Adapter current"
+        case .voltage:             return "Battery voltage"
+        case .amperage:            return "Battery current"
         case .currentCapacity:     return "Capacity"
-        case .designCapacity:      return "Design Capacity"
-        case .batteryPower:        return "Battery Power"
-        case .notChargingReason:   return "Not Charging Reason"
+        case .designCapacity:      return "Design capacity"
+        case .batteryPower:        return "Battery power"
+        case .notChargingReason:   return "Not charging reason"
         }
     }
 
