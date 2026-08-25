@@ -158,6 +158,8 @@ final class SMCService: @unchecked Sendable {
     private var connection: io_connect_t = 0
     private var isOpen = false
     private let lock = NSLock()
+    /// Cached key metadata so subsequent reads skip kSMCGetKeyInfo.
+    private var keyInfoCache: [UInt32: (dataSize: UInt32, dataType: UInt32)] = [:]
 
     deinit {
         close()
@@ -196,6 +198,7 @@ final class SMCService: @unchecked Sendable {
             connection = 0
             isOpen = false
         }
+        keyInfoCache.removeAll(keepingCapacity: false)
     }
 
     // MARK: - Read
@@ -206,28 +209,15 @@ final class SMCService: @unchecked Sendable {
         defer { lock.unlock() }
         guard isOpen else { throw SMCError.notConnected }
 
-        // Step 1: Get key info (data size and type)
-        var input = SMCParamStruct()
-        input.key = fourCharCode(from: key)
-        input.data8 = kSMCGetKeyInfo
+        let keyCode = fourCharCode(from: key)
+        let (dataSize, dataType) = try resolveKeyInfo(keyCode: keyCode, key: key)
 
-        let output = try callSMC(input: input)
-        let dataSize = output.keyInfo.dataSize
-        let dataType = output.keyInfo.dataType
-
-        guard dataSize > 0 else {
-            throw SMCError.keyNotFound(key)
-        }
-
-        // Step 2: Read the actual bytes
         var readInput = SMCParamStruct()
-        readInput.key = fourCharCode(from: key)
+        readInput.key = keyCode
         readInput.keyInfo.dataSize = dataSize
         readInput.data8 = kSMCReadKey
 
         let readOutput = try callSMC(input: readInput)
-
-        // Extract bytes from the tuple
         let allBytes = bytesArray(from: readOutput.bytes, count: Int(dataSize))
 
         return SMCValue(
@@ -251,19 +241,13 @@ final class SMCService: @unchecked Sendable {
         defer { lock.unlock() }
         guard isOpen else { throw SMCError.notConnected }
 
-        // First get key info for the data size
-        var infoInput = SMCParamStruct()
-        infoInput.key = fourCharCode(from: key)
-        infoInput.data8 = kSMCGetKeyInfo
-        let infoOutput = try callSMC(input: infoInput)
+        let keyCode = fourCharCode(from: key)
+        let (dataSize, _) = try resolveKeyInfo(keyCode: keyCode, key: key)
 
-        // Now write
         var writeInput = SMCParamStruct()
-        writeInput.key = fourCharCode(from: key)
-        writeInput.keyInfo.dataSize = infoOutput.keyInfo.dataSize
+        writeInput.key = keyCode
+        writeInput.keyInfo.dataSize = dataSize
         writeInput.data8 = kSMCWriteKey
-
-        // Copy bytes into the tuple
         writeInput.bytes = bytesToTuple(bytes)
 
         let writeOutput = try callSMC(input: writeInput)
@@ -314,15 +298,34 @@ final class SMCService: @unchecked Sendable {
         defer { lock.unlock() }
         guard isOpen else { return nil }
 
-        var input = SMCParamStruct()
-        input.key = fourCharCode(from: key)
-        input.data8 = kSMCGetKeyInfo
-        guard let output = try? callSMC(input: input),
-              output.keyInfo.dataSize > 0 else { return nil }
-        return (fourCharString(from: output.keyInfo.dataType), output.keyInfo.dataSize)
+        let keyCode = fourCharCode(from: key)
+        guard let info = try? resolveKeyInfo(keyCode: keyCode, key: key) else { return nil }
+        return (fourCharString(from: info.dataType), info.dataSize)
     }
 
     // MARK: - Private
+
+    /// Resolve key size/type from cache or one GetKeyInfo call. Caller must hold `lock`.
+    private func resolveKeyInfo(keyCode: UInt32, key: String) throws -> (dataSize: UInt32, dataType: UInt32) {
+        if let cached = keyInfoCache[keyCode] {
+            return cached
+        }
+
+        var input = SMCParamStruct()
+        input.key = keyCode
+        input.data8 = kSMCGetKeyInfo
+        let output = try callSMC(input: input)
+        let dataSize = output.keyInfo.dataSize
+        let dataType = output.keyInfo.dataType
+
+        guard dataSize > 0 else {
+            throw SMCError.keyNotFound(key)
+        }
+
+        let info = (dataSize, dataType)
+        keyInfoCache[keyCode] = info
+        return info
+    }
 
     private func callSMC(input: SMCParamStruct) throws -> SMCParamStruct {
         var inputData = input
