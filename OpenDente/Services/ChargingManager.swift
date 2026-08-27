@@ -237,16 +237,17 @@ final class ChargingManager: ObservableObject {
 
     /// Detect which SMC keys this Mac supports for charging control (read-only, no root needed)
     private func detectChargingAPI() {
-        // Try Tahoe keys first (newer)
-        if smc.keyExists("CHTE") {
+        // Prefer keyInfo (GetKeyInfo) over a full read — some macOS builds allow
+        // metadata for CHTE/CH0B while blocking the value read from userland.
+        if smc.keyInfo("CHTE") != nil || smc.keyExists("CHTE") {
             chargingAPI = .tahoe
             log.notice("Detected Tahoe charging API (CHTE/CHIE)")
-        } else if smc.keyExists("CH0B") {
+        } else if smc.keyInfo("CH0B") != nil || smc.keyExists("CH0B") {
             chargingAPI = .legacy
             log.notice("Detected legacy charging API (CH0B/CH0C)")
         } else {
             chargingAPI = .unknown
-            log.notice("No charging control keys detected")
+            log.notice("No charging control keys detected from the app — will use helper-reported API")
         }
 
         logDiagnosticDump()
@@ -482,7 +483,7 @@ final class ChargingManager: ObservableObject {
         }
 
         // Automatic discharge: if battery > limit and auto-discharge is on
-        if settings.automaticDischarge && pct > limit && mode == .paused {
+        if settings.automaticDischarge && pct > limit && mode == .paused && canControlCharging {
             log.notice("Auto-discharge: \(pct, privacy: .public)% > \(limit, privacy: .public)%")
             startDischarge()
         }
@@ -716,9 +717,11 @@ final class ChargingManager: ObservableObject {
 
     // MARK: - Actions
 
-    /// Whether SMC commands can be sent (helper installed and API detected)
+    /// Whether SMC commands can be sent (helper installed).
+    /// Charging API may still be `.unknown` until the helper reports it — the helper
+    /// process can see CHTE/CH0B even when the sandboxed app readback cannot.
     private var canControlCharging: Bool {
-        isHelperInstalled && chargingAPI != .unknown
+        isHelperInstalled
     }
 
     /// Start Top Up - temporarily charge to 100%
@@ -873,7 +876,6 @@ final class ChargingManager: ObservableObject {
 
     private var controlUnavailableReason: String {
         if !isHelperInstalled { return "helper not installed" }
-        if chargingAPI == .unknown { return "no charging API detected" }
         return "unknown"
     }
 
@@ -882,10 +884,6 @@ final class ChargingManager: ObservableObject {
     /// Disable charging (battery stops receiving charge, Mac runs from adapter)
     private func inhibitCharging() {
         guard isHelperInstalled else { return }
-        guard chargingAPI != .unknown else {
-            log.warning("Cannot inhibit charging: no API detected")
-            return
-        }
 
         lastInhibitTime = Date()
         if firstInhibitTime == nil { firstInhibitTime = lastInhibitTime }
@@ -902,10 +900,6 @@ final class ChargingManager: ObservableObject {
     /// Enable charging (allow battery to charge)
     private func enableCharging() {
         guard isHelperInstalled else { return }
-        guard chargingAPI != .unknown else {
-            log.warning("Cannot enable charging: no API detected")
-            return
-        }
 
         // End any pending inhibit verification cycle
         firstInhibitTime = nil
@@ -926,10 +920,6 @@ final class ChargingManager: ObservableObject {
     /// Force discharge (Mac runs from battery while plugged in)
     private func forceDischarge(_ enable: Bool) {
         guard isHelperInstalled else { return }
-        guard chargingAPI != .unknown else {
-            log.warning("Cannot set discharge: no API detected")
-            return
-        }
 
         helper.forceDischarge(enable: enable) { [weak self] success, error in
             if success {

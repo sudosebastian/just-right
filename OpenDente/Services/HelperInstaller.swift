@@ -68,8 +68,48 @@ enum HelperInstaller {
         case .enabled:          return "Enabled"
         case .notRegistered:    return "Not installed"
         case .requiresApproval: return "Needs approval"
-        case .notFound:         return "Missing from the app"
+        case .notFound:         return installedOutsideApplications
+            ? "Move the app to Applications"
+            : "Missing from the app"
         @unknown default:       return "Unknown"
+        }
+    }
+
+    /// SMAppService often reports `.notFound` when the app is launched from a
+    /// non-standard location (external volume, downloads, build folder).
+    static var installedOutsideApplications: Bool {
+        let path = Bundle.main.bundlePath
+        return !path.hasPrefix("/Applications/")
+            && service.status == .notFound
+    }
+
+    /// Short guidance for the popover when charging controls cannot run.
+    static var controlBlockedTitle: String {
+        switch service.status {
+        case .requiresApproval: return "Approve the helper"
+        case .notRegistered:    return "Install the helper"
+        case .notFound:         return installedOutsideApplications
+            ? "Move just-right to Applications"
+            : "Helper is missing"
+        case .enabled:          return "Helper ready"
+        @unknown default:       return "Helper unavailable"
+        }
+    }
+
+    static var controlBlockedDetail: String {
+        switch service.status {
+        case .requiresApproval:
+            return "Turn on just-right under Allow in the Background so charging controls can run."
+        case .notRegistered:
+            return "Charging controls need the privileged helper."
+        case .notFound:
+            return installedOutsideApplications
+                ? "macOS only registers the helper when just-right lives in Applications."
+                : "This build is missing the privileged helper."
+        case .enabled:
+            return ""
+        @unknown default:
+            return "Charging controls need the privileged helper."
         }
     }
 }

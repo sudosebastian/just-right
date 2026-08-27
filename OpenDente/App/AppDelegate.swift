@@ -153,7 +153,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private func setupPopover() {
         popover = NSPopover()
         popover.contentSize = NSSize(width: 392, height: 600)
-        popover.behavior = .transient
+        // Semitransient keeps the popover key while clicking its buttons;
+        // transient often steals the first click just to activate the window.
+        popover.behavior = .semitransient
         popover.animates = false
         popover.delegate = self
         popover.contentViewController = NSHostingController(rootView: PopoverView())
@@ -171,7 +173,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         } else {
             battery.popoverDidOpen()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.makeKey()
+            popover.contentViewController?.view.window?.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
         }
     }
 

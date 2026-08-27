@@ -225,6 +225,13 @@ struct GeneralTab: View {
             Text("Turn on just-right under Allow in the Background.")
                 .font(.caption)
                 .foregroundStyle(JustRightTheme.warning)
+        } else if status == .notFound, HelperInstaller.installedOutsideApplications {
+            Button("Open Applications") {
+                NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications"))
+            }
+            Text("Copy just-right into Applications, open it from there, then install the helper.")
+                .font(.caption)
+                .foregroundStyle(JustRightTheme.warning)
         } else {
             Button("Install helper") {
                 if HelperInstaller.register() {
@@ -325,7 +332,13 @@ struct ChargingTab: View {
                         .foregroundStyle(.secondary)
                     Spacer()
                     ForEach([60, 70, 80, 90, 100], id: \.self) { value in
-                        LimitPresetButton(value: value, selection: $settings.chargeLimit)
+                        LimitPresetButton(
+                            value: value,
+                            selection: Binding(
+                                get: { settings.chargeLimit },
+                                set: { settings.chargeLimit = $0 }
+                            )
+                        )
                     }
                 }
             }
@@ -493,7 +506,7 @@ struct AutomationTab: View {
                     Button("Start calibration") {
                         charging.startCalibration()
                     }
-                    .disabled(!charging.isHelperInstalled || charging.chargingAPI == .unknown)
+                    .disabled(!charging.isHelperInstalled)
                 }
 
                 Text("Calibration charges to 100%, waits for one hour, discharges to 15%, and charges to 100% again. It can take several hours and keeps the Mac awake.")

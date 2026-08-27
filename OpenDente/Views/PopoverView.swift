@@ -38,7 +38,9 @@ struct PopoverView: View {
         isHelperInstalled: Bool,
         chargingAPI: SMCChargingAPI
     ) -> Bool {
-        isPluggedIn && percentage > chargeLimit && isHelperInstalled && chargingAPI != .unknown
+        // chargingAPI is advisory — helper may know the keys when the app cannot read them.
+        _ = chargingAPI
+        return isPluggedIn && percentage > chargeLimit && isHelperInstalled
     }
 
     var body: some View {
@@ -52,13 +54,15 @@ struct PopoverView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: JustRightTheme.Space.x6) {
+                    // Show blockers first — otherwise Charge/Discharge look broken
+                    // with no explanation above the fold.
+                    notices
+
                     if let phase = charging.calibrationPhase {
                         calibrationStatus(phase)
                     } else {
                         controls
                     }
-
-                    notices
 
                     if settings.showPowerFlow {
                         VStack(alignment: .leading, spacing: JustRightTheme.Space.x3) {
@@ -180,11 +184,47 @@ struct PopoverView: View {
                 }
                 HStack(spacing: JustRightTheme.Space.x2) {
                     ForEach([60, 70, 80, 90, 100], id: \.self) { value in
-                        LimitPresetButton(value: value, selection: $settings.chargeLimit)
+                        LimitPresetButton(value: value, selection: chargeLimitBinding)
                     }
                 }
             }
         }
+    }
+
+    /// Explicit binding — `$settings.chargeLimit` on a non-`@Published`
+    /// computed property is unreliable in some SwiftUI/popover hosts.
+    private var chargeLimitBinding: Binding<Int> {
+        Binding(
+            get: { settings.chargeLimit },
+            set: { settings.chargeLimit = $0 }
+        )
+    }
+
+    private var canChargeToFull: Bool {
+        battery.batteryState.isPluggedIn && charging.isHelperInstalled
+    }
+
+    private var chargeToFullDisabledReason: String? {
+        if !charging.isHelperInstalled {
+            return HelperInstaller.controlBlockedDetail
+        }
+        if !battery.batteryState.isPluggedIn {
+            return "Plug in a charger to charge to 100%."
+        }
+        return nil
+    }
+
+    private var dischargeDisabledReason: String? {
+        if !charging.isHelperInstalled {
+            return HelperInstaller.controlBlockedDetail
+        }
+        if !battery.batteryState.isPluggedIn {
+            return "Plug in a charger to discharge to the limit."
+        }
+        if displayPercentage <= settings.chargeLimit {
+            return "Battery is already at or below the \(settings.chargeLimit)% limit."
+        }
+        return nil
     }
 
     private var primaryActions: some View {
@@ -206,7 +246,8 @@ struct PopoverView: View {
                     Label("Charge to 100%", systemImage: "arrow.up.to.line")
                 }
                 .buttonStyle(JRPrimaryButtonStyle())
-                .disabled(!battery.batteryState.isPluggedIn || !charging.isHelperInstalled || charging.chargingAPI == .unknown)
+                .disabled(!canChargeToFull)
+                .help(chargeToFullDisabledReason ?? "Temporarily charge to 100%")
 
                 Button {
                     charging.startDischarge()
@@ -215,6 +256,7 @@ struct PopoverView: View {
                 }
                 .buttonStyle(JRSecondaryButtonStyle())
                 .disabled(!canDischarge)
+                .help(dischargeDisabledReason ?? "Drain the battery down to the charge limit")
             }
             Spacer()
         }
@@ -245,13 +287,11 @@ struct PopoverView: View {
     private var notices: some View {
         if !charging.isHelperInstalled {
             JRNotice(
-                title: needsHelperApproval ? "Approve the helper" : "Install the helper",
-                detail: needsHelperApproval
-                    ? "Turn on just-right in System Settings to control charging."
-                    : "Charging controls need the privileged helper.",
+                title: HelperInstaller.controlBlockedTitle,
+                detail: HelperInstaller.controlBlockedDetail,
                 tone: .warning,
-                actionTitle: needsHelperApproval ? "Open System Settings" : "Open settings",
-                action: needsHelperApproval ? HelperInstaller.openSystemSettings : openSettings
+                actionTitle: helperNoticeActionTitle,
+                action: helperNoticeAction
             )
         }
 
@@ -413,8 +453,32 @@ struct PopoverView: View {
         HelperInstaller.status == .requiresApproval
     }
 
+    private var helperNoticeActionTitle: String {
+        switch HelperInstaller.status {
+        case .requiresApproval: return "Open System Settings"
+        case .notFound where HelperInstaller.installedOutsideApplications: return "Open Applications"
+        default: return "Open settings"
+        }
+    }
+
+    private var helperNoticeAction: () -> Void {
+        switch HelperInstaller.status {
+        case .requiresApproval:
+            return HelperInstaller.openSystemSettings
+        case .notFound where HelperInstaller.installedOutsideApplications:
+            return openApplicationsFolder
+        default:
+            return openSettings
+        }
+    }
+
     private func openSettings() {
         openSettingsAction()
+        NSApp.activate()
+    }
+
+    private func openApplicationsFolder() {
+        NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications"))
         NSApp.activate()
     }
 

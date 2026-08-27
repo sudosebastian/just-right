@@ -297,10 +297,10 @@ final class DisplayLogicTests: XCTestCase {
         )
     }
 
-    func testCanDischarge_unknownAPI_false() {
-        XCTAssertFalse(
+    func testCanDischarge_unknownAPI_stillAllowedWhenHelperInstalled() {
+        XCTAssertTrue(
             PopoverView.canDischarge(isPluggedIn: true, percentage: 85, chargeLimit: 80, isHelperInstalled: true, chargingAPI: .unknown),
-            "Unknown charging API must prevent discharge — no SMC keys to write"
+            "App-side API detection can miss keys; helper is the write path"
         )
     }
 
