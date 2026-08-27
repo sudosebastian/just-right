@@ -272,34 +272,34 @@ final class DisplayLogicTests: XCTestCase {
 
     func testCanDischarge_pluggedInAboveLimit_true() {
         XCTAssertTrue(
-            PopoverView.canDischarge(isPluggedIn: true, percentage: 85, chargeLimit: 80, isHelperInstalled: true, chargingAPI: .legacy)
+            PopoverView.canDischarge(isPluggedIn: true, percentage: 85, chargeLimit: 80, isHelperReady: true, chargingAPI: .legacy)
         )
     }
 
     func testCanDischarge_notPluggedIn_false() {
         XCTAssertFalse(
-            PopoverView.canDischarge(isPluggedIn: false, percentage: 85, chargeLimit: 80, isHelperInstalled: true, chargingAPI: .legacy)
+            PopoverView.canDischarge(isPluggedIn: false, percentage: 85, chargeLimit: 80, isHelperReady: true, chargingAPI: .legacy)
         )
     }
 
     func testCanDischarge_atOrBelowLimit_false() {
         XCTAssertFalse(
-            PopoverView.canDischarge(isPluggedIn: true, percentage: 80, chargeLimit: 80, isHelperInstalled: true, chargingAPI: .legacy)
+            PopoverView.canDischarge(isPluggedIn: true, percentage: 80, chargeLimit: 80, isHelperReady: true, chargingAPI: .legacy)
         )
         XCTAssertFalse(
-            PopoverView.canDischarge(isPluggedIn: true, percentage: 75, chargeLimit: 80, isHelperInstalled: true, chargingAPI: .legacy)
+            PopoverView.canDischarge(isPluggedIn: true, percentage: 75, chargeLimit: 80, isHelperReady: true, chargingAPI: .legacy)
         )
     }
 
     func testCanDischarge_noHelper_false() {
         XCTAssertFalse(
-            PopoverView.canDischarge(isPluggedIn: true, percentage: 85, chargeLimit: 80, isHelperInstalled: false, chargingAPI: .legacy)
+            PopoverView.canDischarge(isPluggedIn: true, percentage: 85, chargeLimit: 80, isHelperReady: false, chargingAPI: .legacy)
         )
     }
 
     func testCanDischarge_unknownAPI_stillAllowedWhenHelperInstalled() {
         XCTAssertTrue(
-            PopoverView.canDischarge(isPluggedIn: true, percentage: 85, chargeLimit: 80, isHelperInstalled: true, chargingAPI: .unknown),
+            PopoverView.canDischarge(isPluggedIn: true, percentage: 85, chargeLimit: 80, isHelperReady: true, chargingAPI: .unknown),
             "App-side API detection can miss keys; helper is the write path"
         )
     }

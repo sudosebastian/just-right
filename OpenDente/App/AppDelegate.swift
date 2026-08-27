@@ -212,6 +212,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
 
         charging.isHelperInstalled = HelperInstaller.isRegistered
+        if HelperInstaller.isRegistered {
+            charging.connectToHelper()
+        }
         NSLog("[just-right] Helper registered: \(charging.isHelperInstalled)")
     }
 

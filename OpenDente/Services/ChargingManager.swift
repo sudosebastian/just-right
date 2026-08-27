@@ -41,6 +41,8 @@ final class ChargingManager: ObservableObject {
     }
     @Published var chargingAPI: SMCChargingAPI = .unknown
     @Published var isHelperInstalled = false
+    /// Live XPC reachability — SMAppService can say enabled while Background Items still blocks the daemon.
+    @Published var isHelperConnected = false
     @Published private(set) var isPreventingSleep = false
     @Published private(set) var calibrationPhase: CalibrationPhase?
     @Published private(set) var calibrationPhaseStartedAt: Date?
@@ -165,17 +167,29 @@ final class ChargingManager: ObservableObject {
         isHelperInstalled = (status == .enabled)
         log.info("Helper status: \(HelperInstaller.statusDescription, privacy: .public)")
 
-        if isHelperInstalled {
-            let client = HelperClient.shared
-            client.connect()
-
-            // Auto-resync when helper restarts (crash recovery) or reconnects
-            client.onHelperRestarted = { [weak self] in
-                log.info("Helper restarted/reconnected — resyncing state")
-                self?.syncWithHelper()
+        let client = HelperClient.shared
+        client.onReachabilityChanged = { [weak self] reachable in
+            Task { @MainActor in
+                guard let self else { return }
+                let wasConnected = self.isHelperConnected
+                self.isHelperConnected = reachable
+                log.info("Helper XPC reachable: \(reachable, privacy: .public)")
+                if reachable && !wasConnected {
+                    self.syncWithHelper()
+                }
             }
+        }
+        client.onHelperRestarted = { [weak self] in
+            log.info("Helper restarted/reconnected — resyncing state")
+            self?.syncWithHelper()
+        }
 
-            syncWithHelper()
+        if isHelperInstalled {
+            client.connect()
+            // Probe starts async; syncWithHelper runs once reachability flips true.
+        } else {
+            isHelperConnected = false
+            client.disconnect()
         }
     }
 
@@ -717,11 +731,11 @@ final class ChargingManager: ObservableObject {
 
     // MARK: - Actions
 
-    /// Whether SMC commands can be sent (helper installed).
+    /// Whether SMC commands can be sent (helper installed and XPC live).
     /// Charging API may still be `.unknown` until the helper reports it — the helper
     /// process can see CHTE/CH0B even when the sandboxed app readback cannot.
     private var canControlCharging: Bool {
-        isHelperInstalled
+        isHelperInstalled && isHelperConnected
     }
 
     /// Start Top Up - temporarily charge to 100%
@@ -876,6 +890,7 @@ final class ChargingManager: ObservableObject {
 
     private var controlUnavailableReason: String {
         if !isHelperInstalled { return "helper not installed" }
+        if !isHelperConnected { return "helper XPC unreachable (check Allow in the Background)" }
         return "unknown"
     }
 

@@ -196,14 +196,14 @@ struct GeneralTab: View {
 
             Section("Privileged helper") {
                 LabeledContent("Status") {
-                    Text(HelperInstaller.statusDescription)
-                        .foregroundStyle(charging.isHelperInstalled ? JustRightTheme.accent : JustRightTheme.warning)
+                    Text(helperStatusLabel)
+                        .foregroundStyle(charging.isHelperConnected ? JustRightTheme.accent : JustRightTheme.warning)
                 }
 
-                if !charging.isHelperInstalled {
+                if !charging.isHelperConnected {
                     helperActions
 
-                    Text("The helper runs with system access so it can change the charging state.")
+                    Text(helperStatusHint)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -218,13 +218,16 @@ struct GeneralTab: View {
     @ViewBuilder
     private var helperActions: some View {
         let status = HelperInstaller.status
-        if status == .requiresApproval {
+        if status == .requiresApproval || (status == .enabled && !charging.isHelperConnected) {
             Button("Open System Settings") {
                 HelperInstaller.openSystemSettings()
             }
             Text("Turn on just-right under Allow in the Background.")
                 .font(.caption)
                 .foregroundStyle(JustRightTheme.warning)
+            Button("Retry connection") {
+                charging.connectToHelper()
+            }
         } else if status == .notFound, HelperInstaller.installedOutsideApplications {
             Button("Open Applications") {
                 NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications"))
@@ -239,6 +242,23 @@ struct GeneralTab: View {
                 }
             }
         }
+    }
+
+    private var helperStatusLabel: String {
+        if charging.isHelperConnected {
+            return "Connected"
+        }
+        if charging.isHelperInstalled {
+            return "Blocked — enable Background access"
+        }
+        return HelperInstaller.statusDescription
+    }
+
+    private var helperStatusHint: String {
+        if charging.isHelperInstalled {
+            return "macOS registered the helper but is not letting it run. Enable just-right under Login Items → Allow in the Background."
+        }
+        return "The helper runs with system access so it can change the charging state."
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {
@@ -506,7 +526,7 @@ struct AutomationTab: View {
                     Button("Start calibration") {
                         charging.startCalibration()
                     }
-                    .disabled(!charging.isHelperInstalled)
+                    .disabled(!charging.isHelperConnected)
                 }
 
                 Text("Calibration charges to 100%, waits for one hour, discharges to 15%, and charges to 100% again. It can take several hours and keeps the Mac awake.")

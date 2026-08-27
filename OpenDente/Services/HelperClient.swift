@@ -5,7 +5,7 @@ private let log = Logger(subsystem: "com.opendente.app", category: "HelperClient
 
 /// XPC client that communicates with the privileged helper daemon.
 /// Not @MainActor — XPC callbacks arrive on background threads.
-/// All @Published updates are dispatched to main.
+/// Reachability updates are dispatched to main.
 final class HelperClient: @unchecked Sendable {
 
     static let shared = HelperClient()
@@ -18,27 +18,38 @@ final class HelperClient: @unchecked Sendable {
     private static let maxReconnectAttempts = 5
     private static let reconnectDelays: [TimeInterval] = [1, 2, 5, 10, 30]
 
-    /// Called when the helper process restarts (after crash/interruption) or after
+    /// True only after a successful XPC reply (version/heartbeat/command).
+    /// SMAppService can report `.enabled` while Background Items still blocks the daemon.
+    private(set) var isReachable = false
+
+    /// Called when the helper process restarts (crash/interruption) or after
     /// successful reconnection. ChargingManager uses this to resync charging state.
     var onHelperRestarted: (() -> Void)?
+
+    /// Called on the main queue whenever live XPC reachability changes.
+    var onReachabilityChanged: ((Bool) -> Void)?
 
     // MARK: - Connection
 
     /// Establish XPC connection to the helper daemon.
     /// Safe to call multiple times — disconnects existing connection first.
+    /// Pass `resetBackoff: false` for automatic reconnect so attempt counting continues.
     @MainActor
-    func connect() {
+    func connect(resetBackoff: Bool = true) {
         // Disconnect existing connection to avoid leaking XPC connections
         lock.lock()
         let existing = connection
         connection = nil
         isIntentionalDisconnect = false
-        reconnectAttempts = 0
+        if resetBackoff {
+            reconnectAttempts = 0
+        }
         lock.unlock()
         if existing != nil {
             stopHeartbeat()
             existing?.invalidate()
         }
+        setReachable(false)
 
         let conn = NSXPCConnection(
             machServiceName: HelperConstants.machServiceName,
@@ -53,11 +64,11 @@ final class HelperClient: @unchecked Sendable {
             self.connection = nil
             let intentional = self.isIntentionalDisconnect
             self.lock.unlock()
+            self.setReachable(false)
 
             guard !intentional else { return }
 
             // Connection permanently lost — attempt reconnection with backoff.
-            // The helper is launchd-managed, so it should restart automatically.
             Task { @MainActor in
                 self.stopHeartbeat()
                 self.scheduleReconnect()
@@ -66,11 +77,8 @@ final class HelperClient: @unchecked Sendable {
 
         conn.interruptionHandler = { [weak self] in
             guard let self else { return }
-            // Helper process crashed but launchd will restart it.
-            // The NSXPCConnection remains valid — new messages are queued
-            // and delivered when the helper comes back.
-            // We must resync because the fresh helper lost its in-memory state.
             log.warning("XPC connection interrupted — helper crashed, will auto-reconnect")
+            self.setReachable(false)
             Task { @MainActor in
                 self.onHelperRestarted?()
             }
@@ -81,7 +89,11 @@ final class HelperClient: @unchecked Sendable {
         connection = conn
         lock.unlock()
         startHeartbeat()
-        log.notice("Connected to helper")
+        log.notice("Opening XPC connection to helper")
+
+        // Probe immediately — "Connected" only means the socket opened, not that
+        // launchd started a reachable daemon.
+        probeReachability()
     }
 
     /// Disconnect from the helper (intentional — suppresses auto-reconnect)
@@ -94,6 +106,7 @@ final class HelperClient: @unchecked Sendable {
         connection = nil
         lock.unlock()
         conn?.invalidate()
+        setReachable(false)
         log.info("Disconnected from helper")
     }
 
@@ -102,7 +115,8 @@ final class HelperClient: @unchecked Sendable {
     @MainActor
     private func scheduleReconnect() {
         guard reconnectAttempts < Self.maxReconnectAttempts else {
-            log.notice("XPC reconnect failed after \(Self.maxReconnectAttempts, privacy: .public) attempts — helper may need reinstallation")
+            log.notice("XPC reconnect failed after \(Self.maxReconnectAttempts, privacy: .public) attempts — helper may need reinstallation or Background Items approval")
+            setReachable(false)
             return
         }
 
@@ -120,7 +134,7 @@ final class HelperClient: @unchecked Sendable {
             guard needsReconnect else { return }
 
             log.info("XPC reconnect: attempting...")
-            self.connect()
+            self.connect(resetBackoff: false)
             self.onHelperRestarted?()
         }
     }
@@ -145,22 +159,54 @@ final class HelperClient: @unchecked Sendable {
     }
 
     func sendHeartbeat() {
-        withProxy { helper in
-            helper.heartbeat { success in
-                if !success {
+        withProxy(onUnavailable: { [weak self] _, _ in
+            self?.setReachable(false)
+        }) { helper in
+            helper.heartbeat { [weak self] success in
+                if success {
+                    self?.setReachable(true)
+                } else {
                     log.warning("Heartbeat failed")
+                    self?.setReachable(false)
                 }
             }
+        }
+    }
+
+    private func probeReachability() {
+        withProxy(onUnavailable: { [weak self] _, _ in
+            self?.setReachable(false)
+        }) { helper in
+            helper.getVersion { [weak self] version in
+                log.notice("Helper reachable — version \(version, privacy: .public)")
+                self?.setReachable(true)
+            }
+        }
+    }
+
+    private func setReachable(_ reachable: Bool) {
+        lock.lock()
+        let changed = isReachable != reachable
+        isReachable = reachable
+        if reachable {
+            reconnectAttempts = 0
+        }
+        lock.unlock()
+        guard changed else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.onReachabilityChanged?(reachable)
         }
     }
 
     // MARK: - Protocol Methods
 
     func enableCharging(completion: (@Sendable (Bool, String?) -> Void)? = nil) {
-        withProxy(onUnavailable: { success, error in
+        withProxy(onUnavailable: { [weak self] success, error in
+            self?.setReachable(false)
             if let completion { DispatchQueue.main.async { completion(success, error) } }
         }) { helper in
-            helper.enableCharging { success, error in
+            helper.enableCharging { [weak self] success, error in
+                if success { self?.setReachable(true) }
                 if let error {
                     log.error("enableCharging failed: \(error, privacy: .public)")
                 }
@@ -172,10 +218,12 @@ final class HelperClient: @unchecked Sendable {
     }
 
     func inhibitCharging(completion: (@Sendable (Bool, String?) -> Void)? = nil) {
-        withProxy(onUnavailable: { success, error in
+        withProxy(onUnavailable: { [weak self] success, error in
+            self?.setReachable(false)
             if let completion { DispatchQueue.main.async { completion(success, error) } }
         }) { helper in
-            helper.inhibitCharging { success, error in
+            helper.inhibitCharging { [weak self] success, error in
+                if success { self?.setReachable(true) }
                 if let error {
                     log.error("inhibitCharging failed: \(error, privacy: .public)")
                 }
@@ -187,10 +235,12 @@ final class HelperClient: @unchecked Sendable {
     }
 
     func forceDischarge(enable: Bool, completion: (@Sendable (Bool, String?) -> Void)? = nil) {
-        withProxy(onUnavailable: { success, error in
+        withProxy(onUnavailable: { [weak self] success, error in
+            self?.setReachable(false)
             if let completion { DispatchQueue.main.async { completion(success, error) } }
         }) { helper in
-            helper.forceDischarge(enable: enable) { success, error in
+            helper.forceDischarge(enable: enable) { [weak self] success, error in
+                if success { self?.setReachable(true) }
                 if let error {
                     log.error("forceDischarge failed: \(error, privacy: .public)")
                 }
@@ -202,10 +252,12 @@ final class HelperClient: @unchecked Sendable {
     }
 
     func resetToDefaults(completion: (@Sendable (Bool, String?) -> Void)? = nil) {
-        withProxy(onUnavailable: { success, error in
+        withProxy(onUnavailable: { [weak self] success, error in
+            self?.setReachable(false)
             if let completion { DispatchQueue.main.async { completion(success, error) } }
         }) { helper in
-            helper.resetToDefaults { success, error in
+            helper.resetToDefaults { [weak self] success, error in
+                if success { self?.setReachable(true) }
                 if let error {
                     log.error("resetToDefaults failed: \(error, privacy: .public)")
                 }
@@ -227,16 +279,22 @@ final class HelperClient: @unchecked Sendable {
     }
 
     func getVersion(completion: @escaping @Sendable (String) -> Void) {
-        withProxy { helper in
-            helper.getVersion { version in
+        withProxy(onUnavailable: { [weak self] _, _ in
+            self?.setReachable(false)
+        }) { helper in
+            helper.getVersion { [weak self] version in
+                self?.setReachable(true)
                 DispatchQueue.main.async { completion(version) }
             }
         }
     }
 
     func getChargingAPI(completion: @escaping @Sendable (String) -> Void) {
-        withProxy { helper in
-            helper.getChargingAPI { api in
+        withProxy(onUnavailable: { [weak self] _, _ in
+            self?.setReachable(false)
+        }) { helper in
+            helper.getChargingAPI { [weak self] api in
+                self?.setReachable(true)
                 DispatchQueue.main.async { completion(api) }
             }
         }
@@ -303,8 +361,9 @@ final class HelperClient: @unchecked Sendable {
             return
         }
 
-        let helper = conn.remoteObjectProxyWithErrorHandler { error in
+        let helper = conn.remoteObjectProxyWithErrorHandler { [weak self] error in
             log.error("XPC proxy error: \(error.localizedDescription, privacy: .public)")
+            self?.setReachable(false)
         }
 
         guard let proxy = helper as? HelperProtocol else {
@@ -316,4 +375,3 @@ final class HelperClient: @unchecked Sendable {
         block(proxy)
     }
 }
-

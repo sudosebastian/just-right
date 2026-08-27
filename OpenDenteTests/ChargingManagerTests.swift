@@ -156,6 +156,7 @@ final class ChargingManagerTests: XCTestCase {
                                   sleepAssertion: sleepMock)
         manager.chargingAPI = .legacy
         manager.isHelperInstalled = true
+        manager.isHelperConnected = true
 
         // Explicit preconditions — tests that need sailing/heat/sleep enable it themselves
         settings.sailingModeEnabled = false
@@ -953,6 +954,7 @@ final class ChargingManagerTests: XCTestCase {
 
     func testHelperNotInstalled_startDischarge_blocked() {
         manager.isHelperInstalled = false
+        manager.isHelperConnected = false
         manager.startDischarge()
         XCTAssertNotEqual(manager.mode, .discharging,
             "startDischarge without helper must not set mode to .discharging")
@@ -961,9 +963,19 @@ final class ChargingManagerTests: XCTestCase {
 
     func testHelperNotInstalled_startTopUp_blocked() {
         manager.isHelperInstalled = false
+        manager.isHelperConnected = false
         manager.startTopUp()
         XCTAssertNotEqual(manager.mode, .topUp,
             "startTopUp without helper must not set mode to .topUp")
+        XCTAssertTrue(mock.calls.isEmpty)
+    }
+
+    func testHelperUnreachable_startTopUp_blocked() {
+        manager.isHelperInstalled = true
+        manager.isHelperConnected = false
+        manager.startTopUp()
+        XCTAssertNotEqual(manager.mode, .topUp,
+            "startTopUp without live XPC must not set mode to .topUp")
         XCTAssertTrue(mock.calls.isEmpty)
     }
 

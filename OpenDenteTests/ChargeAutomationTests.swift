@@ -91,6 +91,7 @@ final class CalibrationTests: XCTestCase {
         manager = ChargingManager(settings: settings, helper: mock, battery: .shared)
         manager.chargingAPI = .legacy
         manager.isHelperInstalled = true
+        manager.isHelperConnected = true
         now = Date(timeIntervalSince1970: 1_800_000_000)
         manager.nowProvider = { [unowned self] in self.now }
     }

@@ -247,8 +247,11 @@ struct JRPrimaryButtonStyle: ButtonStyle {
         configuration.label
             .font(.system(size: compact ? 11 : 13, weight: .semibold))
             .foregroundStyle(Color.white)
-            .padding(.horizontal, compact ? 10 : 16)
-            .frame(minHeight: compact ? 26 : 32)
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
+            .padding(.horizontal, compact ? 10 : 14)
+            .padding(.vertical, compact ? 6 : 10)
+            .frame(maxWidth: .infinity, minHeight: compact ? 28 : 40)
             .background(
                 RoundedRectangle(cornerRadius: JustRightTheme.Radius.small)
                     .fill(JustRightTheme.accent.opacity(configuration.isPressed ? 0.78 : 1))
@@ -266,8 +269,11 @@ struct JRSecondaryButtonStyle: ButtonStyle {
         configuration.label
             .font(.system(size: compact ? 11 : 13, weight: .medium))
             .foregroundStyle(.primary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
             .padding(.horizontal, compact ? 10 : 14)
-            .frame(minHeight: compact ? 26 : 32)
+            .padding(.vertical, compact ? 6 : 10)
+            .frame(maxWidth: compact ? nil : .infinity, minHeight: compact ? 28 : 40)
             .background(
                 RoundedRectangle(cornerRadius: JustRightTheme.Radius.small)
                     .fill(configuration.isPressed ? JustRightTheme.subtleFill : JustRightTheme.surface)
@@ -302,9 +308,9 @@ struct LimitPresetButton: View {
             selection = value
         }
         .buttonStyle(.plain)
-        .font(.system(size: 11, weight: selected ? .semibold : .medium, design: .rounded).monospacedDigit())
+        .font(.system(size: 12, weight: selected ? .semibold : .medium, design: .rounded).monospacedDigit())
         .foregroundStyle(selected ? Color.white : Color.primary)
-        .frame(minWidth: 40, minHeight: 28)
+        .frame(maxWidth: .infinity, minHeight: 34)
         .background(
             RoundedRectangle(cornerRadius: JustRightTheme.Radius.small)
                 .fill(selected ? JustRightTheme.accent : JustRightTheme.surface)
@@ -313,6 +319,7 @@ struct LimitPresetButton: View {
             RoundedRectangle(cornerRadius: JustRightTheme.Radius.small)
                 .stroke(selected ? Color.clear : JustRightTheme.line, lineWidth: 1)
         )
+        .contentShape(Rectangle())
         .accessibilityLabel("Set charge limit to \(value) percent")
         .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
