@@ -271,9 +271,9 @@ struct JRSecondaryButtonStyle: ButtonStyle {
             .foregroundStyle(.primary)
             .lineLimit(1)
             .minimumScaleFactor(0.85)
-            .padding(.horizontal, compact ? 10 : 14)
-            .padding(.vertical, compact ? 6 : 10)
-            .frame(maxWidth: compact ? nil : .infinity, minHeight: compact ? 28 : 40)
+            .padding(.horizontal, compact ? 12 : 14)
+            .padding(.vertical, compact ? 8 : 10)
+            .frame(maxWidth: compact ? nil : .infinity, minHeight: compact ? 32 : 40)
             .background(
                 RoundedRectangle(cornerRadius: JustRightTheme.Radius.small)
                     .fill(configuration.isPressed ? JustRightTheme.subtleFill : JustRightTheme.surface)

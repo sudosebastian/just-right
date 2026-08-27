@@ -57,6 +57,32 @@ enum HelperInstaller {
         }
     }
 
+    /// Unregister then register so launchd picks up a new helper binary / LWCR.
+    /// Needed after re-signing the helper with a corrected code-signing identifier.
+    @discardableResult
+    static func repair() -> Bool {
+        log.notice("Repairing helper registration (unregister → register)")
+        do {
+            try service.unregister()
+            log.info("Helper unregistered")
+        } catch {
+            log.warning("Unregister during repair: \(error.localizedDescription, privacy: .public)")
+        }
+
+        // Brief yield so smd drops the old job before we re-submit.
+        Thread.sleep(forTimeInterval: 0.5)
+
+        do {
+            try service.register()
+            let status = service.status
+            log.notice("Helper re-registered (status: \(String(describing: status), privacy: .public))")
+            return status == .enabled || status == .requiresApproval
+        } catch {
+            log.error("Failed to re-register helper: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
     /// Open System Settings to the Login Items pane where the user can toggle the helper
     static func openSystemSettings() {
         SMAppService.openSystemSettingsLoginItems()

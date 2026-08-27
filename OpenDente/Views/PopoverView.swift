@@ -313,14 +313,14 @@ struct PopoverView: View {
 
     private var helperBlockedTitle: String {
         if charging.isHelperInstalled {
-            return "Enable background access"
+            return "Helper isn’t responding"
         }
         return HelperInstaller.controlBlockedTitle
     }
 
     private var helperBlockedDetail: String {
         if charging.isHelperInstalled {
-            return "macOS is blocking the charging helper. Turn on just-right under Allow in the Background."
+            return "The charging helper isn’t reachable over XPC. Use Repair helper in Settings, run only the /Applications copy, and confirm OpenDente / just-right is allowed in the Background."
         }
         let detail = HelperInstaller.controlBlockedDetail
         return detail.isEmpty

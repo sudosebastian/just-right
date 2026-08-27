@@ -30,6 +30,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         guard !Self.isRunningTests else { return }
 
+        if CommandLine.arguments.contains("--repair-helper") {
+            NSLog("[just-right] --repair-helper: re-registering SMAppService daemon")
+            _ = HelperInstaller.repair()
+            NSLog("[just-right] Helper status after repair: \(HelperInstaller.statusDescription)")
+            // Continue launching so the user can approve Background Items if needed.
+        }
+
         MacSparkleUpdater.shared.start()
         battery.start()
         charging.start()

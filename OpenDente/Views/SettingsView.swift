@@ -222,11 +222,16 @@ struct GeneralTab: View {
             Button("Open System Settings") {
                 HelperInstaller.openSystemSettings()
             }
-            Text("Turn on just-right under Allow in the Background.")
+            Text("Turn on the OpenDente / just-right row under Allow in the Background.")
                 .font(.caption)
                 .foregroundStyle(JustRightTheme.warning)
             Button("Retry connection") {
                 charging.connectToHelper()
+            }
+            Button("Repair helper") {
+                if HelperInstaller.repair() {
+                    charging.connectToHelper()
+                }
             }
         } else if status == .notFound, HelperInstaller.installedOutsideApplications {
             Button("Open Applications") {
@@ -256,7 +261,7 @@ struct GeneralTab: View {
 
     private var helperStatusHint: String {
         if charging.isHelperInstalled {
-            return "macOS registered the helper but is not letting it run. Enable just-right under Login Items → Allow in the Background."
+            return "The helper is registered but not reachable. Enable the OpenDente / just-right row under Allow in the Background, quit any copy outside /Applications, then tap Retry connection."
         }
         return "The helper runs with system access so it can change the charging state."
     }
