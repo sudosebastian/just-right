@@ -173,20 +173,37 @@ final class SMCService: @unchecked Sendable {
 
         guard !isOpen else { return }
 
-        let service = IOServiceGetMatchingService(
-            kIOMainPortDefault,
-            IOServiceMatching("AppleSMC")
-        )
-        guard service != IO_OBJECT_NULL else {
-            throw SMCError.driverNotFound
-        }
-        defer { IOObjectRelease(service) }
+        // Prefer AppleSMCKeysEndpoint (exposes CHTE/CHIE on modern firmware).
+        // Fall back to classic AppleSMC for older machines.
+        let serviceNames = ["AppleSMCKeysEndpoint", "AppleSMC"]
+        var lastError: kern_return_t = KERN_FAILURE
+        var openedName: String?
 
-        let result = IOServiceOpen(service, mach_task_self_, 0, &connection)
-        guard result == KERN_SUCCESS else {
-            throw SMCError.failedToOpen(result)
+        for name in serviceNames {
+            let service = IOServiceGetMatchingService(
+                kIOMainPortDefault,
+                IOServiceMatching(name)
+            )
+            guard service != IO_OBJECT_NULL else { continue }
+            defer { IOObjectRelease(service) }
+
+            let result = IOServiceOpen(service, mach_task_self_, 0, &connection)
+            if result == KERN_SUCCESS {
+                openedName = name
+                break
+            }
+            lastError = result
         }
+
+        guard openedName != nil else {
+            if lastError == KERN_FAILURE {
+                throw SMCError.driverNotFound
+            }
+            throw SMCError.failedToOpen(lastError)
+        }
+
         isOpen = true
+        smcLog.info("Opened SMC via \(openedName!, privacy: .public)")
     }
 
     func close() {
@@ -237,12 +254,24 @@ final class SMCService: @unchecked Sendable {
 
     /// Write a value to an SMC key. Requires root privileges.
     func writeKey(_ key: String, bytes: [UInt8]) throws {
+        try writeKey(key, bytes: bytes, forcedDataSize: nil)
+    }
+
+    /// Write with an optional forced size when GetKeyInfo fails but the key
+    /// is still writable (seen for CHTE on some AppleSMC-only connections).
+    func writeKey(_ key: String, bytes: [UInt8], forcedDataSize: UInt32?) throws {
         lock.lock()
         defer { lock.unlock() }
         guard isOpen else { throw SMCError.notConnected }
 
         let keyCode = fourCharCode(from: key)
-        let (dataSize, _) = try resolveKeyInfo(keyCode: keyCode, key: key)
+        let dataSize: UInt32
+        if let forcedDataSize {
+            dataSize = forcedDataSize
+            keyInfoCache[keyCode] = (forcedDataSize, fourCharCode(from: "ui32"))
+        } else {
+            dataSize = try resolveKeyInfo(keyCode: keyCode, key: key).dataSize
+        }
 
         var writeInput = SMCParamStruct()
         writeInput.key = keyCode

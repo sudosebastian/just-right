@@ -15,6 +15,9 @@ final class HelperDelegate: NSObject, NSXPCListenerDelegate, HelperProtocol {
     /// Detected charging API for this Mac
     private var chargingAPI: SMCChargingAPI = .unknown
 
+    /// Whether CHTE accepts writes (may need forced size when GetKeyInfo hides it).
+    private var chteWritable = false
+
     /// Whether this Mac has a MagSafe LED controllable via ACLC
     private var hasMagSafeLED = false
 
@@ -48,19 +51,31 @@ final class HelperDelegate: NSObject, NSXPCListenerDelegate, HelperProtocol {
     }
 
     private func detectChargingAPI() {
-        if smc.keyExists("CHTE") {
+        let hasCHTE = smc.keyInfo("CHTE") != nil || smc.keyExists("CHTE")
+        let hasCHIE = smc.keyInfo("CHIE") != nil || smc.keyExists("CHIE")
+        let hasCH0B = smc.keyInfo("CH0B") != nil || smc.keyExists("CH0B")
+
+        if hasCHTE || hasCHIE {
             chargingAPI = .tahoe
-            log.info("Detected Tahoe charging API (CHTE/CHIE)")
-        } else if smc.keyExists("CH0B") {
+            chteWritable = hasCHTE
+            if !chteWritable {
+                // Some firmwares hide CHTE from GetKeyInfo on AppleSMC but still
+                // accept a 4-byte write (especially via AppleSMCKeysEndpoint).
+                chteWritable = probeCHTEWrite()
+            }
+            log.info("Detected Tahoe charging API (CHTE writable=\(self.chteWritable, privacy: .public), CHIE=\(hasCHIE, privacy: .public))")
+        } else if hasCH0B {
             chargingAPI = .legacy
+            chteWritable = false
             log.info("Detected legacy charging API (CH0B/CH0C)")
         } else {
             chargingAPI = .unknown
+            chteWritable = false
             log.info("No charging control keys detected")
         }
 
         // Check for MagSafe LED control (not all Macs have MagSafe)
-        hasMagSafeLED = smc.keyExists("ACLC")
+        hasMagSafeLED = smc.keyExists("ACLC") || smc.keyInfo("ACLC") != nil
         log.info("MagSafe LED (ACLC): \(self.hasMagSafeLED ? "available" : "not found", privacy: .public)")
 
         // Diagnostic: log all charging-related key availability with current values
@@ -77,6 +92,44 @@ final class HelperDelegate: NSObject, NSXPCListenerDelegate, HelperProtocol {
                 log.info("SMC key \(key, privacy: .public): not found")
             }
         }
+    }
+
+    /// Safe probe: write CHTE=0 (allow charging). Returns true if the write is accepted.
+    private func probeCHTEWrite() -> Bool {
+        do {
+            try smc.writeKey("CHTE", bytes: [0x00, 0x00, 0x00, 0x00], forcedDataSize: 4)
+            log.info("CHTE probe write succeeded (forced size)")
+            return true
+        } catch {
+            log.warning("CHTE probe write failed: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
+    private func writeCHTE(inhibited: Bool) throws {
+        let bytes: [UInt8] = inhibited
+            ? [0x01, 0x00, 0x00, 0x00]
+            : [0x00, 0x00, 0x00, 0x00]
+        let hex = hexString(bytes)
+        if smc.keyInfo("CHTE") != nil {
+            log.info("Writing CHTE: [\(hex, privacy: .public)]")
+            try smc.writeKey("CHTE", bytes: bytes)
+        } else {
+            log.info("Writing CHTE (forced): [\(hex, privacy: .public)]")
+            try smc.writeKey("CHTE", bytes: bytes, forcedDataSize: 4)
+        }
+    }
+
+    /// Pause/resume charging. Prefers CHTE; on firmwares where CHTE is gone,
+    /// falls back to CHIE active-discharge as the only available charge gate.
+    private func writeChargeGate(inhibited: Bool) throws {
+        if chteWritable {
+            try writeCHTE(inhibited: inhibited)
+            return
+        }
+        let byte: UInt8 = inhibited ? 0x08 : 0x00
+        log.info("Writing CHIE charge-gate: [\(self.hexString([byte]), privacy: .public)] (no writable CHTE)")
+        try smc.writeKey("CHIE", bytes: [byte])
     }
 
     // MARK: - Verification
@@ -105,7 +158,7 @@ final class HelperDelegate: NSObject, NSXPCListenerDelegate, HelperProtocol {
                 log.warning("CH0B readback failed: key not readable")
             }
         case .tahoe:
-            if let val = smc.readKeyOptional("CHTE") {
+            if chteWritable, let val = smc.readKeyOptional("CHTE") {
                 let allHex = hexString(val.bytes)
                 let byte0 = val.uint8Value ?? 0xFF
                 let ok = inhibited ? (byte0 == 0x01) : (byte0 == 0x00)
@@ -115,8 +168,17 @@ final class HelperDelegate: NSObject, NSXPCListenerDelegate, HelperProtocol {
                     let expected = inhibited ? "01 00 00 00" : "00 00 00 00"
                     log.error("CHTE readback MISMATCH: [\(allHex, privacy: .public)], expected [\(expected, privacy: .public)]")
                 }
+            } else if let val = smc.readKeyOptional("CHIE") {
+                let byte = val.uint8Value ?? 0xFF
+                let ok = inhibited ? (byte == 0x08) : (byte == 0x00)
+                let hex = hexString(val.bytes)
+                if ok {
+                    log.info("CHIE charge-gate readback OK: [\(hex, privacy: .public)]")
+                } else {
+                    log.error("CHIE charge-gate readback MISMATCH: [\(hex, privacy: .public)]")
+                }
             } else {
-                log.warning("CHTE readback failed: key not readable")
+                log.info("Charge-gate readback skipped; relying on IOKit confirmation")
             }
         case .unknown:
             break
@@ -228,8 +290,7 @@ final class HelperDelegate: NSObject, NSXPCListenerDelegate, HelperProtocol {
                 try smc.writeKey("CH0B", bytes: [0x00])
                 try smc.writeKey("CH0C", bytes: [0x00])
             case .tahoe:
-                log.info("Writing CHTE: [00 00 00 00]")
-                try smc.writeKey("CHTE", bytes: [0x00, 0x00, 0x00, 0x00])
+                try writeChargeGate(inhibited: false)
             case .unknown:
                 break
             }
@@ -259,8 +320,7 @@ final class HelperDelegate: NSObject, NSXPCListenerDelegate, HelperProtocol {
                 try smc.writeKey("CH0B", bytes: [0x02])
                 try smc.writeKey("CH0C", bytes: [0x02])
             case .tahoe:
-                log.info("Writing CHTE: [01 00 00 00]")
-                try smc.writeKey("CHTE", bytes: [0x01, 0x00, 0x00, 0x00])
+                try writeChargeGate(inhibited: true)
             case .unknown:
                 break
             }
@@ -305,8 +365,8 @@ final class HelperDelegate: NSObject, NSXPCListenerDelegate, HelperProtocol {
                     try smc.writeKey("CH0B", bytes: [0x02])
                     try smc.writeKey("CH0C", bytes: [0x02])
                 case .tahoe:
-                    log.info("Writing CHTE: [01 00 00 00] (discharge + inhibit)")
-                    try smc.writeKey("CHTE", bytes: [0x01, 0x00, 0x00, 0x00])
+                    // Also assert the charge gate when starting discharge.
+                    try writeChargeGate(inhibited: true)
                 case .unknown:
                     break
                 }
@@ -411,7 +471,7 @@ final class HelperDelegate: NSObject, NSXPCListenerDelegate, HelperProtocol {
                 try smc.writeKey("CH0B", bytes: [0x02])
                 try smc.writeKey("CH0C", bytes: [0x02])
             case .tahoe:
-                try smc.writeKey("CHTE", bytes: [0x01, 0x00, 0x00, 0x00])
+                try writeChargeGate(inhibited: true)
             case .unknown:
                 break
             }
@@ -460,7 +520,7 @@ final class HelperDelegate: NSObject, NSXPCListenerDelegate, HelperProtocol {
                 try smc.writeKey("CH0B", bytes: [0x00])
                 try smc.writeKey("CH0C", bytes: [0x00])
             case .tahoe:
-                try smc.writeKey("CHTE", bytes: [0x00, 0x00, 0x00, 0x00])
+                try writeChargeGate(inhibited: false)
             case .unknown:
                 break
             }

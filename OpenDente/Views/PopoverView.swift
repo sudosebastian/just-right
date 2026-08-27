@@ -38,9 +38,7 @@ struct PopoverView: View {
         isHelperReady: Bool,
         chargingAPI: SMCChargingAPI
     ) -> Bool {
-        // chargingAPI is advisory — helper may know the keys when the app cannot read them.
-        _ = chargingAPI
-        return isPluggedIn && percentage > chargeLimit && isHelperReady
+        return isPluggedIn && percentage > chargeLimit && isHelperReady && chargingAPI != .unknown
     }
 
     var body: some View {
@@ -201,12 +199,15 @@ struct PopoverView: View {
     }
 
     private var canChargeToFull: Bool {
-        battery.batteryState.isPluggedIn && charging.isHelperConnected
+        battery.batteryState.isPluggedIn && charging.isHelperConnected && charging.chargingAPI != .unknown
     }
 
     private var chargeToFullDisabledReason: String? {
         if !charging.isHelperConnected {
             return helperBlockedDetail
+        }
+        if charging.chargingAPI == .unknown {
+            return "This Mac’s SMC charging keys aren’t available yet."
         }
         if !battery.batteryState.isPluggedIn {
             return "Plug in a charger to charge to 100%."
@@ -217,6 +218,9 @@ struct PopoverView: View {
     private var dischargeDisabledReason: String? {
         if !charging.isHelperConnected {
             return helperBlockedDetail
+        }
+        if charging.chargingAPI == .unknown {
+            return "This Mac’s SMC charging keys aren’t available yet."
         }
         if !battery.batteryState.isPluggedIn {
             return "Plug in a charger to discharge to the limit."
@@ -297,6 +301,12 @@ struct PopoverView: View {
                 tone: .warning,
                 actionTitle: helperNoticeActionTitle,
                 action: helperNoticeAction
+            )
+        } else if charging.chargingAPI == .unknown {
+            JRNotice(
+                title: "Charging control unavailable",
+                detail: "The helper is connected, but this Mac/OS isn’t exposing SMC charge-control keys yet.",
+                tone: .warning
             )
         }
 

@@ -918,38 +918,44 @@ final class ChargingManagerTests: XCTestCase {
     }
 
     // =========================================================================
-    // MARK: - Unknown API (app-side detection missed keys)
+    // MARK: - Unknown API
     // =========================================================================
 
-    func testUnknownAPI_helperInstalled_stillSendsSMCWrites() {
-        // On newer macOS the app often cannot read CHTE/CH0B, but the helper can.
+    func testUnknownAPI_blocksEvaluateSMCWrites() {
         manager.chargingAPI = .unknown
 
         manager.evaluateState(makeBatteryState(percentage: 50))
-        XCTAssertEqual(manager.mode, .charging)
-        XCTAssertEqual(mock.calls, [.enableCharging],
-            "Helper is the write path — unknown local API must not block SMC commands")
+        XCTAssertTrue(mock.calls.isEmpty,
+            "Without a known charging API, evaluateState must not send SMC writes")
     }
 
-    func testUnknownAPI_startDischarge_allowedWithHelper() {
+    func testUnknownAPI_startDischarge_blocked() {
         manager.chargingAPI = .unknown
         manager.startDischarge()
-        XCTAssertEqual(manager.mode, .discharging)
-        XCTAssertEqual(mock.calls, [.forceDischarge(enable: true)])
+        XCTAssertNotEqual(manager.mode, .discharging)
+        XCTAssertTrue(mock.calls.isEmpty)
     }
 
-    func testUnknownAPI_startTopUp_allowedWithHelper() {
+    func testUnknownAPI_startTopUp_blocked() {
         manager.chargingAPI = .unknown
+        manager.startTopUp()
+        XCTAssertNotEqual(manager.mode, .topUp)
+        XCTAssertTrue(mock.calls.isEmpty)
+    }
+
+    func testUnknownAPI_pauseCharging_blocked() {
+        manager.chargingAPI = .unknown
+        manager.pauseCharging()
+        XCTAssertNotEqual(manager.mode, .paused)
+        XCTAssertTrue(mock.calls.isEmpty)
+    }
+
+    func testHelperReportedTahoe_allowsControlAfterUnknownLocalDetect() {
+        manager.chargingAPI = .unknown
+        manager.chargingAPI = .tahoe
         manager.startTopUp()
         XCTAssertEqual(manager.mode, .topUp)
         XCTAssertEqual(mock.calls, [.enableCharging])
-    }
-
-    func testUnknownAPI_pauseCharging_allowedWithHelper() {
-        manager.chargingAPI = .unknown
-        manager.pauseCharging()
-        XCTAssertEqual(manager.mode, .paused)
-        XCTAssertEqual(mock.calls, [.inhibitCharging])
     }
 
     func testHelperNotInstalled_startDischarge_blocked() {

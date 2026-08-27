@@ -297,10 +297,10 @@ final class DisplayLogicTests: XCTestCase {
         )
     }
 
-    func testCanDischarge_unknownAPI_stillAllowedWhenHelperInstalled() {
-        XCTAssertTrue(
+    func testCanDischarge_unknownAPI_false() {
+        XCTAssertFalse(
             PopoverView.canDischarge(isPluggedIn: true, percentage: 85, chargeLimit: 80, isHelperReady: true, chargingAPI: .unknown),
-            "App-side API detection can miss keys; helper is the write path"
+            "Unknown API must not enable discharge controls"
         )
     }
 
