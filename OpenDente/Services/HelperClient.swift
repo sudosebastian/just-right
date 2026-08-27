@@ -157,7 +157,9 @@ final class HelperClient: @unchecked Sendable {
     // MARK: - Protocol Methods
 
     func enableCharging(completion: (@Sendable (Bool, String?) -> Void)? = nil) {
-        withProxy { helper in
+        withProxy(onUnavailable: { success, error in
+            if let completion { DispatchQueue.main.async { completion(success, error) } }
+        }) { helper in
             helper.enableCharging { success, error in
                 if let error {
                     log.error("enableCharging failed: \(error, privacy: .public)")
@@ -170,7 +172,9 @@ final class HelperClient: @unchecked Sendable {
     }
 
     func inhibitCharging(completion: (@Sendable (Bool, String?) -> Void)? = nil) {
-        withProxy { helper in
+        withProxy(onUnavailable: { success, error in
+            if let completion { DispatchQueue.main.async { completion(success, error) } }
+        }) { helper in
             helper.inhibitCharging { success, error in
                 if let error {
                     log.error("inhibitCharging failed: \(error, privacy: .public)")
@@ -183,7 +187,9 @@ final class HelperClient: @unchecked Sendable {
     }
 
     func forceDischarge(enable: Bool, completion: (@Sendable (Bool, String?) -> Void)? = nil) {
-        withProxy { helper in
+        withProxy(onUnavailable: { success, error in
+            if let completion { DispatchQueue.main.async { completion(success, error) } }
+        }) { helper in
             helper.forceDischarge(enable: enable) { success, error in
                 if let error {
                     log.error("forceDischarge failed: \(error, privacy: .public)")
@@ -196,7 +202,9 @@ final class HelperClient: @unchecked Sendable {
     }
 
     func resetToDefaults(completion: (@Sendable (Bool, String?) -> Void)? = nil) {
-        withProxy { helper in
+        withProxy(onUnavailable: { success, error in
+            if let completion { DispatchQueue.main.async { completion(success, error) } }
+        }) { helper in
             helper.resetToDefaults { success, error in
                 if let error {
                     log.error("resetToDefaults failed: \(error, privacy: .public)")
@@ -245,7 +253,9 @@ final class HelperClient: @unchecked Sendable {
     }
 
     func setMagSafeLED(color: UInt8, completion: (@Sendable (Bool, String?) -> Void)? = nil) {
-        withProxy { helper in
+        withProxy(onUnavailable: { success, error in
+            if let completion { DispatchQueue.main.async { completion(success, error) } }
+        }) { helper in
             helper.setMagSafeLED(color: color) { success, error in
                 if let error {
                     log.debug("setMagSafeLED failed: \(error, privacy: .public)")
@@ -260,7 +270,9 @@ final class HelperClient: @unchecked Sendable {
     /// Synchronous reset with timeout — for use during app termination
     nonisolated func resetToDefaultsSync(timeout: TimeInterval = 2.0) {
         let semaphore = DispatchSemaphore(value: 0)
-        withProxy { helper in
+        // onUnavailable must signal inline — termination can run on the main
+        // queue, so hopping to main here would deadlock the wait below.
+        withProxy(onUnavailable: { _, _ in semaphore.signal() }) { helper in
             helper.resetToDefaults { _, _ in
                 semaphore.signal()
             }
@@ -273,13 +285,23 @@ final class HelperClient: @unchecked Sendable {
 
     // MARK: - Private
 
-    private func withProxy(block: @escaping (HelperProtocol) -> Void) {
+    /// Run `block` with a live helper proxy. If there is no XPC connection,
+    /// `onUnavailable` is invoked synchronously so sync callers (termination)
+    /// can complete without deadlocking on a main-queue hop.
+    private func withProxy(
+        onUnavailable: (@Sendable (Bool, String?) -> Void)? = nil,
+        block: @escaping (HelperProtocol) -> Void
+    ) {
         lock.lock()
         let conn = connection
         lock.unlock()
 
         // No connection — caller must call connect() first via connectToHelper()
-        guard let conn else { return }
+        guard let conn else {
+            log.error("XPC unavailable: no helper connection")
+            onUnavailable?(false, "Not connected to helper")
+            return
+        }
 
         let helper = conn.remoteObjectProxyWithErrorHandler { error in
             log.error("XPC proxy error: \(error.localizedDescription, privacy: .public)")
@@ -287,6 +309,7 @@ final class HelperClient: @unchecked Sendable {
 
         guard let proxy = helper as? HelperProtocol else {
             log.error("Failed to get HelperProtocol proxy")
+            onUnavailable?(false, "Failed to get helper proxy")
             return
         }
 

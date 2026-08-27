@@ -89,4 +89,20 @@ final class PollingIntervalTests: XCTestCase {
         XCTAssertTrue(needs.hardwarePercentage)
         XCTAssertFalse(needs.detail)
     }
+
+    /// ChargingManager.start() wires this so inhibit retries still run when
+    /// BatteryService skips republishing an identical snapshot.
+    func testUnchangedPollHook_isInvokedByContract() {
+        let defaults = UserDefaults(suiteName: "com.opendente.tests.pollhook")!
+        defaults.removePersistentDomain(forName: "com.opendente.tests.pollhook")
+        let settings = AppSettings(defaults: defaults)
+        let battery = BatteryService(settings: settings)
+
+        var received: BatteryState?
+        battery.onUnchangedPoll = { received = $0 }
+
+        let state = BatteryState.unknown
+        battery.onUnchangedPoll?(state)
+        XCTAssertEqual(received, state)
+    }
 }

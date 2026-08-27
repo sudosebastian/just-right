@@ -130,6 +130,12 @@ final class ChargingManager: ObservableObject {
             }
             .store(in: &cancellables)
 
+        // Identical lean polls skip `@Published` — still re-evaluate so inhibit
+        // retries and other time-based transitions keep running.
+        battery.onUnchangedPoll = { [weak self] state in
+            self?.evaluateState(state)
+        }
+
         // React to settings changes (e.g. charge limit, sailing range) so the state
         // machine re-evaluates immediately instead of waiting for the next battery poll.
         // .receive(on:) defers to the next RunLoop iteration, after the new value is set.

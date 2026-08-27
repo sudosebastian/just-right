@@ -67,6 +67,10 @@ final class BatteryService: ObservableObject {
     let settings: AppSettings
     /// Whether the popover is visible — drives full vs lean SMC reads.
     private(set) var isPopoverOpen = false
+    /// Fired on every poll when the snapshot is unchanged (no `@Published` update).
+    /// ChargingManager uses this for time-based control: inhibit retries, heat
+    /// hysteresis, calibration hold, scheduled top-ups.
+    var onUnchangedPoll: ((BatteryState) -> Void)?
     /// Whether the first IORegistry diagnostic dump has been logged (avoid spamming every 2s)
     private var didLogIORegistryDiag = false
     /// Last logged NotChargingReason — only log when it changes
@@ -198,8 +202,15 @@ final class BatteryService: ObservableObject {
             timeToFull: ioKitState.timeToFull
         )
 
-        // Skip identical snapshots — stops Combine/SwiftUI fan-out while idle at limit.
-        guard state != previous else { return }
+        // Skip identical publishes — stops Combine/SwiftUI fan-out while idle at limit.
+        // Still tick charging control: inhibit retries, heat hysteresis, calibration hold,
+        // and scheduled top-ups are time-based and must run even when SoC is flat.
+        // Without this, a failed/lagging inhibit at the limit never retries, so charging
+        // continues and sailing never engages.
+        guard state != previous else {
+            onUnchangedPoll?(state)
+            return
+        }
         batteryState = state
     }
 

@@ -1146,6 +1146,31 @@ final class ChargingManagerTests: XCTestCase {
         XCTAssertEqual(reInhibitCount, 1, "Should re-send inhibit when system still reports charging")
     }
 
+    /// Regression: lean battery polls skip identical `@Published` updates. ChargingManager
+    /// must still receive those ticks via `onUnchangedPoll`, or inhibit retries never fire
+    /// while stuck at the limit still charging — so pause/sailing appear broken.
+    func testVerification_unchangedPollHook_retriesInhibit() {
+        let battery = BatteryService(settings: settings)
+        var ticks = 0
+        battery.onUnchangedPoll = { [weak manager] state in
+            ticks += 1
+            manager?.evaluateState(state)
+        }
+
+        let snapped = makeBatteryState(percentage: 90, isCharging: true)
+        manager.evaluateState(snapped)
+        XCTAssertEqual(manager.mode, .paused)
+        mock.clearCalls()
+
+        manager.lastInhibitTime = Date().addingTimeInterval(-16)
+        // Simulate BatteryService's identical-snapshot path
+        battery.onUnchangedPoll?(snapped)
+
+        XCTAssertEqual(ticks, 1)
+        XCTAssertEqual(mock.calls.filter { $0 == .inhibitCharging }.count, 1,
+            "Unchanged-poll hook must drive inhibit retry")
+    }
+
     func testVerification_pausedAndNotCharging_doesNotResend() {
         // First evaluation: inhibit
         manager.evaluateState(makeBatteryState(percentage: 90))
