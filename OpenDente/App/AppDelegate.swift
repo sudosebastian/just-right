@@ -11,6 +11,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var eventMonitor: Any?
     private var cancellables = Set<AnyCancellable>()
     private var lastIconName: String?
+    #if DEBUG
+    private var uiAuditWindow: NSWindow?
+    #endif
 
     private let battery = BatteryService.shared
     private let charging = ChargingManager.shared
@@ -25,10 +28,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ProcessInfo.processInfo.environment["XCTestBundlePath"] != nil
     }
 
+    private static var isRunningUIAudit: Bool {
+        #if DEBUG
+        CommandLine.arguments.contains("--ui-audit")
+        #else
+        false
+        #endif
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
         guard !Self.isRunningTests else { return }
+
+        #if DEBUG
+        if Self.isRunningUIAudit {
+            NSApp.setActivationPolicy(.regular)
+            settings.configureForUIAudit()
+            configureUIAuditState()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.showUIAuditWindow()
+            }
+            return
+        }
+        #endif
 
         if CommandLine.arguments.contains("--repair-helper") {
             NSLog("[just-right] --repair-helper: re-registering SMAppService daemon")
@@ -103,6 +126,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         guard !Self.isRunningTests else { return }
+        #if DEBUG
+        if Self.isRunningUIAudit {
+            settings.cleanUpUIAuditDefaults()
+            return
+        }
+        #endif
         // Synchronous reset with timeout to ensure charging is re-enabled before exit
         charging.resetToDefaultsSync()
         HelperClient.shared.disconnect()
@@ -173,17 +202,92 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     @objc private func togglePopover() {
-        guard let button = statusItem.button else { return }
+        guard statusItem.button != nil else { return }
 
         if popover.isShown {
             popover.performClose(nil)
         } else {
-            battery.popoverDidOpen()
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            showPopover(refreshBattery: true)
         }
     }
+
+    private func showPopover(refreshBattery: Bool) {
+        guard let button = statusItem.button else { return }
+        if refreshBattery {
+            battery.popoverDidOpen()
+        }
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        popover.contentViewController?.view.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    #if DEBUG
+    private func configureUIAuditState() {
+        battery.configureForUIAudit(BatteryState(
+            percentage: 72,
+            hardwarePercentage: 71,
+            isCharging: true,
+            isPluggedIn: true,
+            currentCapacity: 4210,
+            maxCapacity: 5860,
+            designCapacity: 6249,
+            cycleCount: 86,
+            temperature: 31.4,
+            voltage: 12.1,
+            amperage: 1.08,
+            systemPower: 18.6,
+            adapterPower: 34.2,
+            adapterVoltage: 20.3,
+            adapterInfo: AdapterInfo(
+                name: "96W USB-C Power Adapter",
+                description: "USB-C power adapter",
+                manufacturer: "Apple Inc.",
+                model: "0x7002",
+                watts: 96,
+                voltage: 20.3,
+                current: 1.7,
+                serial: "C4H441203C3PM0WBF",
+                firmware: "01090058",
+                isWireless: false,
+                usbPDProfiles: [],
+                activeProfileIndex: nil
+            ),
+            batteryPower: 13.1,
+            notChargingReason: 0,
+            chargerInhibitReason: 0,
+            timeToEmpty: nil,
+            timeToFull: 64
+        ))
+        charging.mode = .charging
+        charging.chargingAPI = .tahoe
+        charging.isHelperInstalled = true
+        charging.isHelperConnected = true
+    }
+
+    private func showUIAuditWindow() {
+        let showsSettings = CommandLine.arguments.contains("--ui-audit-settings")
+        let size = showsSettings ? NSSize(width: 800, height: 620) : NSSize(width: 392, height: 600)
+        let colorScheme: ColorScheme = CommandLine.arguments.contains("--ui-audit-dark") ? .dark : .light
+        let rootView = AnyView(
+            (showsSettings ? AnyView(SettingsView()) : AnyView(PopoverView()))
+                .preferredColorScheme(colorScheme)
+        )
+        let controller = NSHostingController(rootView: rootView)
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.titled, .closable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = showsSettings ? "just-right Settings — UI Audit" : "just-right Panel — UI Audit"
+        window.contentViewController = controller
+        window.setContentSize(size)
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        uiAuditWindow = window
+        NSApp.activate(ignoringOtherApps: true)
+    }
+    #endif
 
     // MARK: - Event Monitor
 

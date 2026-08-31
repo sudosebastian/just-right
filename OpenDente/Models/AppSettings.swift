@@ -9,11 +9,43 @@ final class AppSettings: ObservableObject {
 
     static let shared = AppSettings()
 
-    let defaults: UserDefaults
+    private(set) var defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
     }
+
+    #if DEBUG
+    private static let uiAuditSuiteName = "com.opendente.ui-audit"
+
+    func configureForUIAudit() {
+        guard let isolatedDefaults = UserDefaults(suiteName: Self.uiAuditSuiteName) else { return }
+        isolatedDefaults.removePersistentDomain(forName: Self.uiAuditSuiteName)
+        defaults = isolatedDefaults
+
+        isolatedDefaults.set(80, forKey: "chargeLimit")
+        isolatedDefaults.set(true, forKey: "sailingModeEnabled")
+        isolatedDefaults.set(10, forKey: "sailingRange")
+        isolatedDefaults.set(true, forKey: "heatProtectionEnabled")
+        isolatedDefaults.set(35.0, forKey: "heatProtectionTemp")
+        isolatedDefaults.set(true, forKey: "scheduledTopUpEnabled")
+        isolatedDefaults.set(7, forKey: "scheduledTopUpHour")
+        isolatedDefaults.set(0, forKey: "scheduledTopUpMinute")
+        isolatedDefaults.set(Array(2...6), forKey: "scheduledTopUpWeekdays")
+        isolatedDefaults.set(true, forKey: "statusBarShowPercentage")
+        isolatedDefaults.set(true, forKey: "statusBarShowPower")
+        isolatedDefaults.set(true, forKey: "statusBarShowMode")
+        isolatedDefaults.set(true, forKey: "showPowerFlow")
+        isolatedDefaults.set(true, forKey: "controlMagSafeLED")
+        isolatedDefaults.set(true, forKey: "showNotifications")
+    }
+
+    func cleanUpUIAuditDefaults() {
+        UserDefaults(suiteName: Self.uiAuditSuiteName)?
+            .removePersistentDomain(forName: Self.uiAuditSuiteName)
+        defaults = .standard
+    }
+    #endif
 
     // MARK: - Charging
 

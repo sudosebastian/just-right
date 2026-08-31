@@ -146,19 +146,19 @@ struct PowerFlowView: View {
     // MARK: - No Data View
 
     private var noPowerDataView: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: JustRightTheme.Space.x2) {
             Image(systemName: battery.isPluggedIn ? "bolt.fill" : "battery.75percent")
                 .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: JustRightTheme.Space.x1) {
                 Text(battery.isPluggedIn ? "Connected to power" : "Running on battery")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(JustRightTheme.labelFont)
                 Text("Detailed power needs SMC access")
-                    .font(.system(size: 10))
+                    .font(JustRightTheme.labelFont)
                     .foregroundStyle(.secondary)
             }
             Spacer()
             Text("\(battery.percentage)%")
-                .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                .font(JustRightTheme.dataFont)
         }
     }
 
@@ -169,7 +169,7 @@ struct PowerFlowView: View {
         HStack(spacing: 0) {
             sourceLabel(icon: "bolt.fill", label: adapterWattsText)
 
-            VStack(spacing: 4) {
+            VStack(spacing: JustRightTheme.Space.x1) {
                 if let systemPower = battery.systemPower, systemPower > 0.1 {
                     flowBar(
                         label: String(format: "%.1f W", systemPower),
@@ -194,7 +194,7 @@ struct PowerFlowView: View {
         let adapterShare = total > 0 ? CGFloat(adapterPower / total) : 0.5
         let batteryShare = total > 0 ? CGFloat(batteryDrain / total) : 0.5
 
-        return VStack(spacing: 4) {
+        return VStack(spacing: JustRightTheme.Space.x1) {
             // Row 1: adapter contribution
             if adapterPower > 0.1 {
                 HStack(spacing: 0) {
@@ -227,7 +227,7 @@ struct PowerFlowView: View {
         HStack(spacing: 0) {
             sourceLabel(icon: batterySourceIcon, label: nil)
 
-            VStack(spacing: 4) {
+            VStack(spacing: JustRightTheme.Space.x1) {
                 if let systemPower = battery.systemPower, systemPower > 0.1 {
                     flowBar(
                         label: String(format: "%.1f W", systemPower),
@@ -258,13 +258,13 @@ struct PowerFlowView: View {
     // MARK: - Components
 
     private func sourceLabel(icon: String, label: String?) -> some View {
-        VStack(spacing: 2) {
+        VStack(spacing: JustRightTheme.Space.x1) {
             Image(systemName: icon)
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
             if let label, !label.isEmpty {
                 Text(label)
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
         }
@@ -272,9 +272,9 @@ struct PowerFlowView: View {
     }
 
     private func flowBar(label: String, icon: String, color: Color, proportion: CGFloat) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: JustRightTheme.Space.x2) {
             Image(systemName: "arrow.right")
-                .font(.system(size: 8))
+                .font(.system(size: 9, weight: .medium))
                 .foregroundStyle(color)
 
             GeometryReader { geo in
@@ -288,11 +288,11 @@ struct PowerFlowView: View {
                 }
                 .overlay(
                     Text(label)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
                         .foregroundStyle(.primary)
                 )
             }
-            .frame(height: 20)
+            .frame(height: 24)
 
             Image(systemName: icon)
                 .font(.system(size: 11))

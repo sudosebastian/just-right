@@ -60,8 +60,12 @@ struct SettingsView: View {
             ForEach(destinations) { item in
                 Button {
                     destination = item
+                    focusedDestination = item
                 } label: {
                     HStack(spacing: JustRightTheme.Space.x3) {
+                        Capsule()
+                            .fill(destination == item ? JustRightTheme.accent : Color.clear)
+                            .frame(width: 3, height: 16)
                         Image(systemName: item.icon)
                             .font(.system(size: 12, weight: .medium))
                             .frame(width: 16)
@@ -76,13 +80,6 @@ struct SettingsView: View {
                         RoundedRectangle(cornerRadius: JustRightTheme.Radius.small)
                             .fill(destination == item ? JustRightTheme.subtleFill : Color.clear)
                     )
-                    .overlay {
-                        if focusedDestination == item {
-                            RoundedRectangle(cornerRadius: JustRightTheme.Radius.small)
-                                .stroke(JustRightTheme.accent, lineWidth: 2)
-                                .padding(1)
-                        }
-                    }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -97,21 +94,25 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var settingsContent: some View {
-        VStack(alignment: .leading, spacing: JustRightTheme.Space.x4) {
-            JRPageHeader(title: destination.title, detail: destination.detail)
-                .padding(.horizontal, JustRightTheme.Space.x8)
-                .padding(.top, JustRightTheme.Space.x8)
+        ScrollView {
+            VStack(alignment: .leading, spacing: JustRightTheme.Space.x6) {
+                JRPageHeader(title: destination.title, detail: destination.detail)
 
-            switch destination {
-            case .general: GeneralTab()
-            case .charging: ChargingTab()
-            case .automation: AutomationTab()
-            case .notifications: NotificationsTab()
-            case .menuBar: StatusBarTab()
-            case .panel: PopoverItemsTab()
-            case .battery: BatteryInfoTab()
+                switch destination {
+                case .general: GeneralTab()
+                case .charging: ChargingTab()
+                case .automation: AutomationTab()
+                case .notifications: NotificationsTab()
+                case .menuBar: StatusBarTab()
+                case .panel: PopoverItemsTab()
+                case .battery: BatteryInfoTab()
+                }
             }
+            .frame(maxWidth: 560, alignment: .leading)
+            .padding(.horizontal, JustRightTheme.Space.x8)
+            .padding(.vertical, JustRightTheme.Space.x8)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(JustRightTheme.canvas)
     }
 
@@ -171,19 +172,23 @@ struct GeneralTab: View {
     @ObservedObject var charging = ChargingManager.shared
 
     var body: some View {
-        Form {
-            Section {
-                Toggle("Launch at login", isOn: $settings.launchAtLogin)
-                    .onChange(of: settings.launchAtLogin) { _, newValue in
-                        setLaunchAtLogin(newValue)
-                    }
+        VStack(alignment: .leading, spacing: JustRightTheme.Space.x6) {
+            JRSettingsSection("Application") {
+                JRSettingRow("Launch at login", detail: "Start just-right automatically after you sign in.") {
+                    Toggle("", isOn: $settings.launchAtLogin)
+                        .labelsHidden()
+                        .onChange(of: settings.launchAtLogin) { _, newValue in
+                            setLaunchAtLogin(newValue)
+                        }
+                }
             }
 
-            Section {
-                LabeledContent("Version") {
+            JRSettingsSection("Updates") {
+                JRSettingRow("Installed version") {
                     let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
                     let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
                     Text("\(version) (\(build))")
+                        .font(JustRightTheme.dataFont)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
@@ -191,12 +196,14 @@ struct GeneralTab: View {
                 Button("Check for updates...") {
                     MacSparkleUpdater.shared.checkForUpdates()
                 }
+                .buttonStyle(JRSecondaryButtonStyle(compact: true))
                 .disabled(!MacSparkleUpdater.shared.isAvailable)
             }
 
-            Section("Privileged helper") {
-                LabeledContent("Status") {
+            JRSettingsSection("Privileged helper", detail: "The helper changes charging state with system access.") {
+                JRSettingRow("Connection status") {
                     Text(helperStatusLabel)
+                        .font(JustRightTheme.dataFont)
                         .foregroundStyle(charging.isHelperConnected ? JustRightTheme.accent : JustRightTheme.warning)
                 }
 
@@ -204,15 +211,12 @@ struct GeneralTab: View {
                     helperActions
 
                     Text(helperStatusHint)
-                        .font(.caption)
+                        .font(JustRightTheme.bodyFont)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
-        .formStyle(.columns)
-        .scrollContentBackground(.hidden)
-        .padding(.horizontal, JustRightTheme.Space.x8)
-        .padding(.bottom, JustRightTheme.Space.x6)
     }
 
     @ViewBuilder
@@ -285,31 +289,38 @@ struct NotificationsTab: View {
     @ObservedObject var settings = AppSettings.shared
 
     var body: some View {
-        Form {
-            Section {
-                Toggle("Allow notifications", isOn: $settings.showNotifications)
+        VStack(alignment: .leading, spacing: JustRightTheme.Space.x6) {
+            JRSettingsSection("Notifications") {
+                JRSettingRow("Allow notifications", detail: "Show native alerts for selected battery events.") {
+                    Toggle("", isOn: $settings.showNotifications)
+                        .labelsHidden()
+                }
             }
 
-            Section("Events") {
-                Toggle("Charge limit reached", isOn: $settings.notifyChargeLimitReached)
-                Toggle("Full charge complete", isOn: $settings.notifyTopUpComplete)
-                Toggle("Heat protection active", isOn: $settings.notifyHeatProtection)
-                Toggle("Discharge complete", isOn: $settings.notifyDischargeComplete)
+            JRSettingsSection("Events") {
+                notificationRow("Charge limit reached", binding: $settings.notifyChargeLimitReached)
+                notificationRow("Full charge complete", binding: $settings.notifyTopUpComplete)
+                notificationRow("Heat protection active", binding: $settings.notifyHeatProtection)
+                notificationRow("Discharge complete", binding: $settings.notifyDischargeComplete)
             }
             .disabled(!settings.showNotifications)
 
             #if DEBUG
-            Section("Test") {
+            JRSettingsSection("Test") {
                 Button("Send test notification") {
                     sendTestNotification()
                 }
+                .buttonStyle(JRSecondaryButtonStyle(compact: true))
             }
             #endif
         }
-        .formStyle(.columns)
-        .scrollContentBackground(.hidden)
-        .padding(.horizontal, JustRightTheme.Space.x8)
-        .padding(.bottom, JustRightTheme.Space.x6)
+    }
+
+    private func notificationRow(_ title: String, binding: Binding<Bool>) -> some View {
+        JRSettingRow(title) {
+            Toggle("", isOn: binding)
+                .labelsHidden()
+        }
     }
 
     #if DEBUG
@@ -336,10 +347,9 @@ struct ChargingTab: View {
     @ObservedObject var charging = ChargingManager.shared
 
     var body: some View {
-        Form {
-            Section("Charge limit") {
-                HStack {
-                    Text("Limit")
+        VStack(alignment: .leading, spacing: JustRightTheme.Space.x6) {
+            JRSettingsSection("Charge limit", detail: "Charging pauses when the battery reaches this level.") {
+                HStack(spacing: JustRightTheme.Space.x4) {
                     Slider(
                         value: Binding(
                             get: { Double(settings.chargeLimit) },
@@ -348,32 +358,35 @@ struct ChargingTab: View {
                         in: 20...100
                     )
                     Text("\(settings.chargeLimit)%")
-                        .font(.system(.body, design: .monospaced))
+                        .font(JustRightTheme.dataFont)
                         .frame(width: 45, alignment: .trailing)
                 }
 
-                HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: JustRightTheme.Space.x2) {
                     Text("Presets")
+                        .font(JustRightTheme.labelFont)
                         .foregroundStyle(.secondary)
-                    Spacer()
-                    ForEach([60, 70, 80, 90, 100], id: \.self) { value in
-                        LimitPresetButton(
-                            value: value,
-                            selection: Binding(
-                                get: { settings.chargeLimit },
-                                set: { settings.chargeLimit = $0 }
+                    HStack(spacing: JustRightTheme.Space.x2) {
+                        ForEach([60, 70, 80, 90, 100], id: \.self) { value in
+                            LimitPresetButton(
+                                value: value,
+                                selection: Binding(
+                                    get: { settings.chargeLimit },
+                                    set: { settings.chargeLimit = $0 }
+                                )
                             )
-                        )
+                        }
                     }
                 }
             }
 
-            Section("Sailing mode") {
-                Toggle("Enable sailing mode", isOn: $settings.sailingModeEnabled)
+            JRSettingsSection("Sailing mode", detail: "Let the battery drift below the limit before charging resumes.") {
+                settingToggle("Enable sailing mode", binding: $settings.sailingModeEnabled)
 
                 if settings.sailingModeEnabled {
-                    HStack {
-                        Text("Range")
+                    HStack(spacing: JustRightTheme.Space.x4) {
+                        Text("Resume range")
+                            .font(JustRightTheme.bodyFont)
                         Slider(
                             value: Binding(
                                 get: { Double(settings.sailingRange) },
@@ -382,21 +395,22 @@ struct ChargingTab: View {
                             in: 2...25
                         )
                         Text("\(settings.sailingRange)%")
-                            .font(.system(.body, design: .monospaced))
-                            .frame(width: 35, alignment: .trailing)
+                            .font(JustRightTheme.dataFont)
+                            .frame(width: 40, alignment: .trailing)
                     }
-                    Text("Charging resumes when the battery reaches \(settings.sailingLowerBound)%.")
-                        .font(.caption)
+                    Text("Charging resumes at \(settings.sailingLowerBound)%.")
+                        .font(JustRightTheme.labelFont)
                         .foregroundStyle(.secondary)
                 }
             }
 
-            Section("Heat protection") {
-                Toggle("Enable heat protection", isOn: $settings.heatProtectionEnabled)
+            JRSettingsSection("Heat protection", detail: "Pause charging when the battery becomes too warm.") {
+                settingToggle("Enable heat protection", binding: $settings.heatProtectionEnabled)
 
                 if settings.heatProtectionEnabled {
-                    HStack {
+                    HStack(spacing: JustRightTheme.Space.x4) {
                         Text("Maximum temperature")
+                            .font(JustRightTheme.bodyFont)
                         Slider(
                             value: Binding(
                                 get: { TemperatureDisplay.toDisplay(settings.heatProtectionTemp) },
@@ -409,42 +423,30 @@ struct ChargingTab: View {
                             in: TemperatureDisplay.sliderRange
                         )
                         Text(TemperatureDisplay.format(settings.heatProtectionTemp, fractionDigits: 0))
-                            .font(.system(.body, design: .monospaced))
+                            .font(JustRightTheme.dataFont)
                             .frame(width: 50, alignment: .trailing)
                     }
                 }
             }
 
-            Section("System behavior") {
-                Toggle("Automatic discharge", isOn: $settings.automaticDischarge)
-                Toggle("Control MagSafe LED", isOn: $settings.controlMagSafeLED)
+            JRSettingsSection("System behavior") {
+                settingToggle("Automatic discharge", detail: "Discharge to the limit while connected to power.", binding: $settings.automaticDischarge)
+                settingToggle("Control MagSafe LED", detail: "Reflect just-right’s state on the connector.", binding: $settings.controlMagSafeLED)
                 if settings.controlMagSafeLED {
-                    Toggle("Turn off LED when not charging", isOn: $settings.magSafeLEDOffWhenInactive)
-                        .padding(.leading, 16)
-                    Text("The light turns off while holding or sailing, and orange while charging.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 16)
-                } else {
-                    Text("The light is orange while charging and green at the limit. This setting needs MagSafe.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    settingToggle("Turn off LED when inactive", detail: "Keep the light off while holding or sailing.", binding: $settings.magSafeLEDOffWhenInactive)
                 }
-                Toggle("Stop charging when sleeping", isOn: $settings.stopChargingWhenSleeping)
-                Text("Pause charging before the Mac sleeps.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Toggle("Keep awake until charge limit", isOn: $settings.disableSleepUntilChargeLimit)
-                Text("Keep the Mac awake while it moves toward the charge limit.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Toggle("Use hardware battery percentage", isOn: $settings.useHardwareBatteryPercentage)
+                settingToggle("Stop charging during sleep", detail: "Pause charging before the Mac sleeps.", binding: $settings.stopChargingWhenSleeping)
+                settingToggle("Keep awake until the limit", detail: "Prevent sleep while moving toward the charge limit.", binding: $settings.disableSleepUntilChargeLimit)
+                settingToggle("Use hardware battery percentage", detail: "Prefer the battery controller’s state of charge when available.", binding: $settings.useHardwareBatteryPercentage)
             }
         }
-        .formStyle(.columns)
-        .scrollContentBackground(.hidden)
-        .padding(.horizontal, JustRightTheme.Space.x8)
-        .padding(.bottom, JustRightTheme.Space.x6)
+    }
+
+    private func settingToggle(_ title: String, detail: String? = nil, binding: Binding<Bool>) -> some View {
+        JRSettingRow(title, detail: detail) {
+            Toggle("", isOn: binding)
+                .labelsHidden()
+        }
     }
 }
 
@@ -480,14 +482,19 @@ struct AutomationTab: View {
     }
 
     var body: some View {
-        Form {
-            Section("Scheduled top up") {
-                Toggle("Charge to 100% on a schedule", isOn: $settings.scheduledTopUpEnabled)
+        VStack(alignment: .leading, spacing: JustRightTheme.Space.x6) {
+            JRSettingsSection("Scheduled top up", detail: "Charge to 100% on selected days.") {
+                JRSettingRow("Enable schedule") {
+                    Toggle("", isOn: $settings.scheduledTopUpEnabled).labelsHidden()
+                }
 
-                DatePicker("Start time", selection: scheduleTime, displayedComponents: .hourAndMinute)
-                    .disabled(!settings.scheduledTopUpEnabled)
+                JRSettingRow("Start time") {
+                    DatePicker("", selection: scheduleTime, displayedComponents: .hourAndMinute)
+                        .labelsHidden()
+                        .disabled(!settings.scheduledTopUpEnabled)
+                }
 
-                HStack(spacing: 8) {
+                HStack(spacing: JustRightTheme.Space.x2) {
                     ForEach(1...7, id: \.self) { weekday in
                         weekdayButton(weekday)
                     }
@@ -496,28 +503,29 @@ struct AutomationTab: View {
 
                 if settings.scheduledTopUpWeekdays.isEmpty {
                     Text("Choose at least one day.")
-                        .font(.caption)
+                        .font(JustRightTheme.labelFont)
                         .foregroundStyle(JustRightTheme.warning)
                 } else if settings.scheduledTopUpEnabled, let nextTopUp {
                     Text("Next full charge: \(nextTopUp.formatted(date: .abbreviated, time: .shortened))")
-                        .font(.caption)
+                        .font(JustRightTheme.labelFont)
                         .foregroundStyle(.secondary)
                 }
 
                 Text("The full charge starts within 15 minutes of this time. The Mac must be awake and connected to power.")
-                    .font(.caption)
+                    .font(JustRightTheme.bodyFont)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            Section("Battery calibration") {
+            JRSettingsSection("Battery calibration", detail: "Run a complete charge and discharge cycle to recalibrate the battery gauge.") {
                 if let phase = charging.calibrationPhase {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: JustRightTheme.Space.x2) {
                         HStack {
                             Text(phase.displayName)
-                                .fontWeight(.medium)
+                                .font(JustRightTheme.bodyFont.weight(.medium))
                             Spacer()
                             Text("Step \(phase.stepNumber) of 4")
-                                .font(.caption.monospacedDigit())
+                                .font(JustRightTheme.dataFont)
                                 .foregroundStyle(.secondary)
                         }
 
@@ -526,23 +534,22 @@ struct AutomationTab: View {
                         Button("Cancel calibration", role: .destructive) {
                             charging.cancelCalibration()
                         }
+                        .buttonStyle(JRSecondaryButtonStyle(compact: true))
                     }
                 } else {
                     Button("Start calibration") {
                         charging.startCalibration()
                     }
+                    .buttonStyle(JRSecondaryButtonStyle(compact: true))
                     .disabled(!charging.isHelperConnected)
                 }
 
                 Text("Calibration charges to 100%, waits for one hour, discharges to 15%, and charges to 100% again. It can take several hours and keeps the Mac awake.")
-                    .font(.caption)
+                    .font(JustRightTheme.bodyFont)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .formStyle(.columns)
-        .scrollContentBackground(.hidden)
-        .padding(.horizontal, JustRightTheme.Space.x8)
-        .padding(.bottom, JustRightTheme.Space.x6)
     }
 
     private func weekdayButton(_ weekday: Int) -> some View {
@@ -558,10 +565,13 @@ struct AutomationTab: View {
             }
             settings.scheduledTopUpWeekdays = days
         }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-        .tint(selected ? JustRightTheme.accent : .secondary)
+        .buttonStyle(.plain)
+        .font(JustRightTheme.labelFont)
+        .foregroundStyle(selected ? Color.white : Color.primary)
+        .frame(maxWidth: .infinity, minHeight: 30)
+        .background(RoundedRectangle(cornerRadius: JustRightTheme.Radius.small).fill(selected ? JustRightTheme.accent : JustRightTheme.subtleFill))
         .accessibilityLabel("\(calendar.weekdaySymbols[weekday - 1]), \(selected ? "selected" : "not selected")")
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -573,27 +583,25 @@ struct StatusBarTab: View {
     @ObservedObject var charging = ChargingManager.shared
 
     var body: some View {
-        Form {
-            Section("Visible measurements") {
-                Toggle("Battery percentage", isOn: $settings.statusBarShowPercentage)
-                Toggle("Temperature", isOn: $settings.statusBarShowTemperature)
-                Toggle("Power use", isOn: $settings.statusBarShowPower)
-                Toggle("Charging state icon", isOn: $settings.statusBarShowMode)
+        VStack(alignment: .leading, spacing: JustRightTheme.Space.x6) {
+            JRSettingsSection("Visible measurements") {
+                measurementRow("Battery percentage", binding: $settings.statusBarShowPercentage)
+                measurementRow("Temperature", binding: $settings.statusBarShowTemperature)
+                measurementRow("Power use", binding: $settings.statusBarShowPower)
+                measurementRow("Charging state icon", binding: $settings.statusBarShowMode)
             }
 
-            Section {
-                Text("Preview")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            JRSettingsSection("Preview", detail: "This is how the item appears in the menu bar.") {
                 HStack(spacing: 6) {
                     Image(systemName: statusBarIcon)
                         .font(.system(size: 15))
                     if !statusBarPreview.isEmpty {
                         Text(statusBarPreview)
-                            .font(.system(size: 13, design: .monospaced))
+                            .font(JustRightTheme.dataFont)
                     }
                 }
-                .padding(8)
+                .padding(.horizontal, JustRightTheme.Space.x3)
+                .frame(minHeight: 36)
                 .background(
                     RoundedRectangle(cornerRadius: JustRightTheme.Radius.small)
                         .fill(JustRightTheme.surface)
@@ -604,10 +612,10 @@ struct StatusBarTab: View {
                 )
             }
         }
-        .formStyle(.columns)
-        .scrollContentBackground(.hidden)
-        .padding(.horizontal, JustRightTheme.Space.x8)
-        .padding(.bottom, JustRightTheme.Space.x6)
+    }
+
+    private func measurementRow(_ title: String, binding: Binding<Bool>) -> some View {
+        JRSettingRow(title) { Toggle("", isOn: binding).labelsHidden() }
     }
 
     private var statusBarIcon: String {
@@ -638,42 +646,31 @@ struct PopoverItemsTab: View {
     @State private var disabledItems: [PopoverDetailItem] = []
 
     var body: some View {
-        VStack(spacing: 0) {
-            Text("Drag visible measurements to reorder them. Use the eye button to show or hide a measurement.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, JustRightTheme.Space.x8)
-                .padding(.bottom, JustRightTheme.Space.x3)
-
-            List {
-                Section {
-                    Toggle("Show power flow", isOn: $settings.showPowerFlow)
+        VStack(alignment: .leading, spacing: JustRightTheme.Space.x6) {
+            JRSettingsSection("Power flow") {
+                JRSettingRow("Show power flow", detail: "Visualize how adapter and battery power reach the Mac.") {
+                    Toggle("", isOn: $settings.showPowerFlow).labelsHidden()
                 }
+            }
 
-                Section("Visible") {
-                    ForEach(enabledItems) { item in
-                        PopoverItemRow(item: item, isEnabled: true) {
-                            disableItem(item)
-                        }
-                    }
-                    .onMove { from, to in
-                        enabledItems.move(fromOffsets: from, toOffset: to)
-                        save()
-                    }
-                }
-
-                Section("Hidden") {
-                    ForEach(disabledItems) { item in
-                        PopoverItemRow(item: item, isEnabled: false) {
-                            enableItem(item)
-                        }
+            JRSettingsSection("Visible measurements", detail: "Use the arrow buttons to set the order shown in the panel.") {
+                ForEach(Array(enabledItems.enumerated()), id: \.element.id) { index, item in
+                    PopoverItemRow(
+                        item: item,
+                        isEnabled: true,
+                        moveUp: index > 0 ? { moveItem(from: index, to: index - 1) } : nil,
+                        moveDown: index < enabledItems.count - 1 ? { moveItem(from: index, to: index + 1) } : nil
+                    ) {
+                        disableItem(item)
                     }
                 }
             }
-            .scrollContentBackground(.hidden)
-            .padding(.horizontal, JustRightTheme.Space.x6)
-            .padding(.bottom, JustRightTheme.Space.x6)
+
+            JRSettingsSection("Hidden measurements") {
+                ForEach(disabledItems) { item in
+                    PopoverItemRow(item: item, isEnabled: false) { enableItem(item) }
+                }
+            }
         }
         .onAppear { load() }
     }
@@ -686,6 +683,14 @@ struct PopoverItemsTab: View {
 
     private func save() {
         settings.popoverDetailItems = enabledItems
+    }
+
+    private func moveItem(from source: Int, to destination: Int) {
+        guard source != destination,
+              enabledItems.indices.contains(source),
+              enabledItems.indices.contains(destination) else { return }
+        enabledItems.swapAt(source, destination)
+        save()
     }
 
     private func disableItem(_ item: PopoverDetailItem) {
@@ -704,6 +709,8 @@ struct PopoverItemsTab: View {
 struct PopoverItemRow: View {
     let item: PopoverDetailItem
     let isEnabled: Bool
+    var moveUp: (() -> Void)? = nil
+    var moveDown: (() -> Void)? = nil
     let onToggle: () -> Void
 
     var body: some View {
@@ -718,14 +725,31 @@ struct PopoverItemRow: View {
 
             Spacer()
 
-            Button(action: onToggle) {
-                Image(systemName: isEnabled ? "eye.fill" : "eye.slash")
-                    .font(.system(size: 12))
-                    .foregroundStyle(isEnabled ? JustRightTheme.accent : .secondary)
+            if isEnabled {
+                Button(action: { moveUp?() }) {
+                    Image(systemName: "chevron.up")
+                }
+                .buttonStyle(JRIconButtonStyle())
+                .disabled(moveUp == nil)
+                .accessibilityLabel("Move \(item.displayName) up")
+
+                Button(action: { moveDown?() }) {
+                    Image(systemName: "chevron.down")
+                }
+                .buttonStyle(JRIconButtonStyle())
+                .disabled(moveDown == nil)
+                .accessibilityLabel("Move \(item.displayName) down")
             }
-            .buttonStyle(.plain)
+
+            Button(action: onToggle) {
+                Image(systemName: isEnabled ? "eye.slash" : "eye")
+                    .font(.system(size: 12))
+                    .foregroundStyle(isEnabled ? .secondary : JustRightTheme.accent)
+            }
+            .buttonStyle(JRIconButtonStyle())
             .accessibilityLabel("\(isEnabled ? "Hide" : "Show") \(item.displayName)")
         }
+        .frame(minHeight: 32)
     }
 }
 
@@ -740,8 +764,8 @@ struct BatteryInfoTab: View {
     var body: some View {
         let state = battery.batteryState
 
-        Form {
-            Section("Battery") {
+        VStack(alignment: .leading, spacing: JustRightTheme.Space.x6) {
+            JRSettingsSection("Battery") {
                 infoRow("macOS percentage", value: "\(state.percentage)%")
                 validatedRow("Hardware SoC", raw: state.hardwarePercentage, format: { "\($0)%" })
                 if let current = state.currentCapacity, let max = state.maxCapacity {
@@ -761,7 +785,7 @@ struct BatteryInfoTab: View {
                              warn: { $0 < -20 || $0 > 100 })
             }
 
-            Section("Battery power") {
+            JRSettingsSection("Battery power") {
                 infoRow("Source", value: state.powerSource)
                 validatedRow("Battery voltage", raw: state.voltage,
                              format: { String(format: "%.2f V", $0) },
@@ -774,7 +798,7 @@ struct BatteryInfoTab: View {
                              warn: { abs($0) > 200 })
             }
 
-            Section("System power") {
+            JRSettingsSection("System power") {
                 validatedRow("System power", raw: state.systemPower,
                              format: { String(format: "%.1f W", $0) },
                              warn: { $0 < 0 || $0 > 200 })
@@ -788,7 +812,7 @@ struct BatteryInfoTab: View {
                 isAdapterConnected: state.isAdapterConnected,
                 mode: charging.mode
             ), let adapter = state.adapterInfo {
-                Section("Adapter") {
+                JRSettingsSection("Adapter") {
                     infoRow("Name", value: adapter.name)
                     if let desc = adapter.description {
                         infoRow("Description", value: desc)
@@ -821,7 +845,7 @@ struct BatteryInfoTab: View {
                 }
 
                 if !adapter.usbPDProfiles.isEmpty {
-                    Section("USB-PD profiles") {
+                    JRSettingsSection("USB-PD profiles") {
                         ForEach(Array(adapter.usbPDProfiles.enumerated()), id: \.offset) { index, profile in
                             HStack {
                                 Text(String(format: "%.0fV \u{00D7} %.2fA (%dW)",
@@ -838,13 +862,13 @@ struct BatteryInfoTab: View {
                 }
 
                 if let reason = state.notChargingReason, reason != 0 {
-                    Section {
+                    JRSettingsSection("Charging state") {
                         infoRow("Not charging reason", value: String(format: "0x%016llX", reason))
                     }
                 }
             }
 
-            Section("Control") {
+            JRSettingsSection("Control") {
                 infoRow("Mode", value: charging.mode.displayName)
                 infoRow("Charging API", value: chargingAPIName)
                 if settings.controlMagSafeLED {
@@ -856,20 +880,13 @@ struct BatteryInfoTab: View {
                 }
             }
 
-            Section {
+            JRSettingsSection("Diagnostics", detail: "Export system information, battery state, settings, and recent logs.") {
                 Button("Export diagnostic report...") {
                     DiagnosticExporter.exportWithSavePanel()
                 }
-                Text("Save system information, battery state, settings, and recent logs as a text file.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .buttonStyle(JRSecondaryButtonStyle(compact: true))
             }
         }
-        .formStyle(.columns)
-        .scrollContentBackground(.hidden)
-        .padding(.horizontal, JustRightTheme.Space.x8)
-        .padding(.bottom, JustRightTheme.Space.x6)
-        .frame(maxHeight: .infinity)
     }
 
     private var chargingAPIName: String {
@@ -891,37 +908,22 @@ struct BatteryInfoTab: View {
     }
 
     private func infoRow(_ label: String, value: String) -> some View {
-        LabeledContent(label) {
-            Text(value)
-                .font(.system(.body, design: .monospaced))
-                .textSelection(.enabled)
-        }
+        JRValueRow(label: label, value: value)
     }
 
     /// Show a value with warning if out of expected range, or "–" if unavailable
     private func validatedRow<T>(_ label: String, raw: T?, format: (T) -> String, warn: ((T) -> Bool)? = nil) -> some View {
-        LabeledContent(label) {
+        Group {
             if let val = raw {
-                let isWarning = warn?(val) ?? false
-                Text(format(val))
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(isWarning ? .orange : .primary)
-                    .textSelection(.enabled)
+                JRValueRow(label: label, value: format(val), tone: (warn?(val) ?? false) ? JustRightTheme.warning : .primary)
             } else {
-                Text("–")
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                JRValueRow(label: label, value: "–", tone: .secondary)
             }
         }
     }
 
     /// Overload for pre-formatted string values
     private func validatedRow(_ label: String, value: String, warn: Bool) -> some View {
-        LabeledContent(label) {
-            Text(value)
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(warn ? .orange : .primary)
-                .textSelection(.enabled)
-        }
+        JRValueRow(label: label, value: value, tone: warn ? JustRightTheme.warning : .primary)
     }
 }

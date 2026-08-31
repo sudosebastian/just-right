@@ -150,7 +150,7 @@ struct JRSettingRow<Control: View>: View {
     }
 
     var body: some View {
-        HStack(alignment: detail == nil ? .center : .top, spacing: JustRightTheme.Space.x6) {
+        HStack(alignment: .center, spacing: JustRightTheme.Space.x6) {
             VStack(alignment: .leading, spacing: JustRightTheme.Space.x1) {
                 Text(title)
                     .font(JustRightTheme.bodyFont)
@@ -165,6 +165,73 @@ struct JRSettingRow<Control: View>: View {
             control
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minHeight: 28)
+    }
+}
+
+struct JRSettingsSection<Content: View>: View {
+    let title: String
+    var detail: String? = nil
+    @ViewBuilder let content: Content
+
+    init(_ title: String, detail: String? = nil, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.detail = detail
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: JustRightTheme.Space.x3) {
+            VStack(alignment: .leading, spacing: JustRightTheme.Space.x1) {
+                Text(title)
+                    .font(JustRightTheme.titleFont)
+                if let detail {
+                    Text(detail)
+                        .font(JustRightTheme.bodyFont)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: JustRightTheme.Space.x3) {
+                content
+            }
+            .padding(JustRightTheme.Space.x4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: JustRightTheme.Radius.medium)
+                    .fill(JustRightTheme.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: JustRightTheme.Radius.medium)
+                    .stroke(JustRightTheme.line.opacity(0.8), lineWidth: 1)
+            )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct JRValueRow: View {
+    let label: String
+    let value: String
+    var tone: Color = .primary
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: JustRightTheme.Space.x4) {
+            Text(label)
+                .font(JustRightTheme.bodyFont)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: JustRightTheme.Space.x4)
+            Text(value)
+                .font(JustRightTheme.dataFont)
+                .foregroundStyle(tone)
+                .multilineTextAlignment(.trailing)
+                .textSelection(.enabled)
+        }
+        .frame(minHeight: 20)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(value)
     }
 }
 

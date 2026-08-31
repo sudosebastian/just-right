@@ -90,6 +90,13 @@ final class BatteryService: ObservableObject {
         self.settings = settings
     }
 
+    #if DEBUG
+    func configureForUIAudit(_ state: BatteryState) {
+        batteryState = state
+        smcAvailable = true
+    }
+    #endif
+
     // MARK: - Lifecycle
 
     func start() {
