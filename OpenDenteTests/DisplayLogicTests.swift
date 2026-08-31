@@ -324,6 +324,19 @@ final class DisplayLogicTests: XCTestCase {
         XCTAssertTrue(PopoverView.adapterVisible(isPluggedIn: true, mode: .discharging))
     }
 
+    func testAdapterVisible_chieGate_usesPhysicalPresence() {
+        XCTAssertTrue(PopoverView.adapterVisible(
+            isPluggedIn: false,
+            isAdapterConnected: true,
+            mode: .paused
+        ))
+        XCTAssertFalse(PopoverView.adapterVisible(
+            isPluggedIn: false,
+            isAdapterConnected: false,
+            mode: .paused
+        ))
+    }
+
     func testAdapterVisible_unplugged_allNonDischargeModes_false() {
         let modes: [ChargingMode] = [.charging, .paused, .sailing, .topUp, .calibrating, .heatProtection, .onBattery, .idle]
         for mode in modes {

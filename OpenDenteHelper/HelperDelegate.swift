@@ -57,12 +57,9 @@ final class HelperDelegate: NSObject, NSXPCListenerDelegate, HelperProtocol {
 
         if hasCHTE || hasCHIE {
             chargingAPI = .tahoe
-            chteWritable = hasCHTE
-            if !chteWritable {
-                // Some firmwares hide CHTE from GetKeyInfo on AppleSMC but still
-                // accept a 4-byte write (especially via AppleSMCKeysEndpoint).
-                chteWritable = probeCHTEWrite()
-            }
+            // Never trust GetKeyInfo alone — some firmwares expose CHTE as readable
+            // (or hide it) while writes fail. Probe before preferring CHTE over CHIE.
+            chteWritable = probeCHTEWrite()
             log.info("Detected Tahoe charging API (CHTE writable=\(self.chteWritable, privacy: .public), CHIE=\(hasCHIE, privacy: .public))")
         } else if hasCH0B {
             chargingAPI = .legacy
@@ -124,8 +121,13 @@ final class HelperDelegate: NSObject, NSXPCListenerDelegate, HelperProtocol {
     /// falls back to CHIE active-discharge as the only available charge gate.
     private func writeChargeGate(inhibited: Bool) throws {
         if chteWritable {
-            try writeCHTE(inhibited: inhibited)
-            return
+            do {
+                try writeCHTE(inhibited: inhibited)
+                return
+            } catch {
+                log.warning("CHTE write failed (\(error.localizedDescription, privacy: .public)) — falling back to CHIE")
+                chteWritable = false
+            }
         }
         let byte: UInt8 = inhibited ? 0x08 : 0x00
         log.info("Writing CHIE charge-gate: [\(self.hexString([byte]), privacy: .public)] (no writable CHTE)")

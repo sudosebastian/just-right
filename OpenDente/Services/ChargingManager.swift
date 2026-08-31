@@ -339,11 +339,12 @@ final class ChargingManager: ObservableObject {
         defer { updateSleepAssertion(state) }
 
         // Not plugged in = on battery, nothing to control.
-        // Exception: during force discharge, IOKit reports power source as "battery"
-        // even though the charger is physically connected. Don't kill our own discharge.
+        // Exception: during force discharge / CHIE charge-gate, IOKit reports power
+        // source as "Battery" even though the charger is physically connected.
+        // Prefer VD0R-backed isAdapterConnected over isPluggedIn.
         let calibrationAdapterPresent = calibrationPhase == .dischargingToLow
-            && (state.adapterPower ?? 0) > 0.1
-        guard state.isPluggedIn || mode == .discharging || calibrationAdapterPresent else {
+            && state.isAdapterConnected
+        guard state.isAdapterConnected || mode == .discharging || calibrationAdapterPresent else {
             if mode == .topUp {
                 log.info("Top Up ended: unplugged at \(state.percentage, privacy: .public)%")
             }
@@ -426,9 +427,10 @@ final class ChargingManager: ObservableObject {
 
         // Discharge mode - don't override until unplugged (or auto-discharge reaches limit)
         if mode == .discharging {
-            // Real unplug detection: during force discharge, IOKit reports isPluggedIn=false.
-            // A real unplug is when isPluggedIn=false AND adapter power is gone.
-            if !state.isPluggedIn && (state.adapterPower ?? 0) < 0.1 {
+            // Real unplug detection: during force discharge / CHIE gate, IOKit reports
+            // isPluggedIn=false and PDTR collapses near zero. VD0R stays high while the
+            // cable is attached — use isAdapterConnected, not adapterPower alone.
+            if !state.isAdapterConnected {
                 log.info("Discharge ended: charger unplugged at \(pct, privacy: .public)%")
                 forceDischarge(false)
                 mode = .onBattery
@@ -667,8 +669,8 @@ final class ChargingManager: ObservableObject {
     /// Update IOPMAssertion to prevent/allow system idle sleep.
     /// Called at the end of every evaluateState.
     private func updateSleepAssertion(_ state: BatteryState) {
-        let calibrationAdapterPresent = state.isPluggedIn
-            || (calibrationPhase == .dischargingToLow && (state.adapterPower ?? 0) > 0.1)
+        let calibrationAdapterPresent = state.isAdapterConnected
+            || (calibrationPhase == .dischargingToLow && state.isAdapterConnected)
         if calibrationPhase != nil && calibrationAdapterPresent {
             if !isPreventingSleep {
                 log.info("Sleep assertion: preventing sleep for calibration")

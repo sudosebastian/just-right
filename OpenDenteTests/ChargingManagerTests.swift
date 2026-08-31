@@ -75,6 +75,7 @@ func makeBatteryState(
     isPluggedIn: Bool = true,
     temperature: Double? = 25.0,
     adapterPower: Double? = nil,
+    adapterVoltage: Double? = nil,
     notChargingReason: UInt64? = nil,
     chargerInhibitReason: UInt64? = nil,
     timeToEmpty: Int? = nil,
@@ -94,6 +95,7 @@ func makeBatteryState(
         amperage: nil,
         systemPower: nil,
         adapterPower: adapterPower,
+        adapterVoltage: adapterVoltage,
         adapterInfo: nil,
         batteryPower: nil,
         notChargingReason: notChargingReason,
@@ -498,6 +500,40 @@ final class ChargingManagerTests: XCTestCase {
         XCTAssertEqual(manager.mode, .discharging,
             "Discharge must survive IOKit isPluggedIn flicker when adapter power is present")
         XCTAssertTrue(mock.calls.isEmpty, "No SMC writes during IOKit flicker")
+    }
+
+    /// CHIE force-discharge collapses PDTR to ~0.1W and flips IOKit to Battery Power.
+    /// VD0R stays at the negotiated rail (~20V) — that must keep the control loop alive.
+    func testDischarge_survivesCHIECollapsedAdapterPower() {
+        manager.startDischarge()
+        mock.reset()
+
+        manager.evaluateState(makeBatteryState(
+            percentage: 85,
+            isPluggedIn: false,
+            adapterPower: 0.1,
+            adapterVoltage: 20.5
+        ))
+        XCTAssertEqual(manager.mode, .discharging,
+            "CHIE must not be treated as a real unplug when VD0R shows adapter rail")
+        XCTAssertTrue(mock.calls.isEmpty)
+    }
+
+    func testPaused_survivesCHIEBatteryPowerReport() {
+        manager.evaluateState(makeBatteryState(percentage: 90))
+        XCTAssertEqual(manager.mode, .paused)
+        mock.reset()
+
+        // Same CHIE side effect after inhibitChargeGate writes CHIE=0x08
+        manager.evaluateState(makeBatteryState(
+            percentage: 90,
+            isPluggedIn: false,
+            adapterPower: 0.1,
+            adapterVoltage: 20.5
+        ))
+        XCTAssertEqual(manager.mode, .paused,
+            "CHIE charge-gate must not abandon control as onBattery")
+        XCTAssertTrue(mock.calls.isEmpty)
     }
 
     func testDischarge_unplugAndReplug_noStaleDischargeKey() {

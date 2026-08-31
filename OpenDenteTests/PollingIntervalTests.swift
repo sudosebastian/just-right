@@ -15,7 +15,8 @@ final class PollingIntervalTests: XCTestCase {
             statusBarShowTemperature: false,
             statusBarShowPower: false,
             useHardwareBatteryPercentage: false,
-            needsAdapterPower: false
+            needsAdapterPower: false,
+            needsAdapterVoltage: false
         )
         XCTAssertEqual(needs, .full)
     }
@@ -27,13 +28,15 @@ final class PollingIntervalTests: XCTestCase {
             statusBarShowTemperature: false,
             statusBarShowPower: false,
             useHardwareBatteryPercentage: false,
-            needsAdapterPower: false
+            needsAdapterPower: false,
+            needsAdapterVoltage: false
         )
         XCTAssertEqual(needs, .controlOnly)
         XCTAssertFalse(needs.temperature)
         XCTAssertFalse(needs.systemPower)
         XCTAssertFalse(needs.hardwarePercentage)
         XCTAssertFalse(needs.adapterPower)
+        XCTAssertFalse(needs.adapterVoltage)
         XCTAssertFalse(needs.detail)
     }
 
@@ -44,7 +47,8 @@ final class PollingIntervalTests: XCTestCase {
             statusBarShowTemperature: false,
             statusBarShowPower: true,
             useHardwareBatteryPercentage: false,
-            needsAdapterPower: false
+            needsAdapterPower: false,
+            needsAdapterVoltage: false
         )
         XCTAssertTrue(needs.systemPower)
         XCTAssertFalse(needs.detail)
@@ -58,22 +62,40 @@ final class PollingIntervalTests: XCTestCase {
             statusBarShowTemperature: false,
             statusBarShowPower: false,
             useHardwareBatteryPercentage: false,
-            needsAdapterPower: false
+            needsAdapterPower: false,
+            needsAdapterVoltage: false
         )
         XCTAssertTrue(needs.temperature)
         XCTAssertFalse(needs.detail)
     }
 
-    func testPollNeeds_discharge_readsAdapterPower() {
+    func testPollNeeds_discharge_readsAdapterPowerAndVoltage() {
         let needs = BatteryPollNeeds.resolve(
             popoverOpen: false,
             heatProtectionEnabled: false,
             statusBarShowTemperature: false,
             statusBarShowPower: false,
             useHardwareBatteryPercentage: false,
-            needsAdapterPower: true
+            needsAdapterPower: true,
+            needsAdapterVoltage: false
         )
         XCTAssertTrue(needs.adapterPower)
+        XCTAssertTrue(needs.adapterVoltage, "PDTR reads also pull VD0R for CHIE presence")
+        XCTAssertFalse(needs.detail)
+    }
+
+    func testPollNeeds_chieGate_readsAdapterVoltageOnly() {
+        let needs = BatteryPollNeeds.resolve(
+            popoverOpen: false,
+            heatProtectionEnabled: false,
+            statusBarShowTemperature: false,
+            statusBarShowPower: false,
+            useHardwareBatteryPercentage: false,
+            needsAdapterPower: false,
+            needsAdapterVoltage: true
+        )
+        XCTAssertFalse(needs.adapterPower)
+        XCTAssertTrue(needs.adapterVoltage)
         XCTAssertFalse(needs.detail)
     }
 
@@ -84,7 +106,8 @@ final class PollingIntervalTests: XCTestCase {
             statusBarShowTemperature: false,
             statusBarShowPower: false,
             useHardwareBatteryPercentage: true,
-            needsAdapterPower: false
+            needsAdapterPower: false,
+            needsAdapterVoltage: false
         )
         XCTAssertTrue(needs.hardwarePercentage)
         XCTAssertFalse(needs.detail)

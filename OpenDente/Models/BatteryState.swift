@@ -29,6 +29,7 @@ struct BatteryState: Equatable {
     let percentage: Int              // 0-100 (macOS reported)
     let hardwarePercentage: Int?     // Raw fuel gauge SoC — B0RM/B0FC ratio, BRSC fallback
     let isCharging: Bool
+    /// IOKit power-source state is AC. False during CHIE force-discharge even with a cable attached.
     let isPluggedIn: Bool
 
     // MARK: - Capacity
@@ -42,7 +43,9 @@ struct BatteryState: Equatable {
     let voltage: Double?             // Volts (battery)
     let amperage: Double?            // Amps (battery, positive = charging, negative = discharging)
     let systemPower: Double?         // Watts - total system draw
-    let adapterPower: Double?        // Watts - power from adapter
+    let adapterPower: Double?        // Watts - power from adapter (near-zero under CHIE)
+    /// Live adapter rail voltage (VD0R). Stays ~negotiated V under CHIE; ~0 when unplugged.
+    let adapterVoltage: Double?
     let adapterInfo: AdapterInfo?     // Rich charger info from IORegistry + SMC
     let batteryPower: Double?        // Watts - power to/from battery
     let notChargingReason: UInt64?   // IORegistry ChargerData.NotChargingReason (0 = normal)
@@ -72,6 +75,16 @@ struct BatteryState: Equatable {
     }
 
     var isOnBattery: Bool { !isPluggedIn }
+
+    /// Cable/adapter physically present. Prefer this over `isPluggedIn` for charge control:
+    /// CHIE (and similar) make IOKit report Battery Power while VD0R stays high.
+    var isAdapterConnected: Bool {
+        if isPluggedIn { return true }
+        if let adapterVoltage, adapterVoltage >= 5.0 { return true }
+        // Meaningful draw only — CHIE collapses PDTR to ~0.1W which is not a disconnect.
+        if let adapterPower, adapterPower >= 1.0 { return true }
+        return false
+    }
 
     var powerSource: String {
         isPluggedIn ? "Power Adapter" : "Battery"
@@ -106,7 +119,7 @@ struct BatteryState: Equatable {
         percentage: 0, hardwarePercentage: nil, isCharging: false, isPluggedIn: false,
         currentCapacity: nil, maxCapacity: nil, designCapacity: nil, cycleCount: nil,
         temperature: nil, voltage: nil, amperage: nil,
-        systemPower: nil, adapterPower: nil, adapterInfo: nil,
+        systemPower: nil, adapterPower: nil, adapterVoltage: nil, adapterInfo: nil,
         batteryPower: nil, notChargingReason: nil, chargerInhibitReason: nil,
         timeToEmpty: nil, timeToFull: nil
     )

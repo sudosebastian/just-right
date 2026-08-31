@@ -12,6 +12,8 @@ struct BatteryPollNeeds: Equatable {
     var systemPower: Bool
     var hardwarePercentage: Bool
     var adapterPower: Bool
+    /// VD0R — physical adapter presence under CHIE (IOKit lies about AC).
+    var adapterVoltage: Bool
     /// Voltage, amperage, battery power, capacity, cycles, adapter details, live VD0R/ID0R.
     var detail: Bool
 
@@ -20,6 +22,7 @@ struct BatteryPollNeeds: Equatable {
         systemPower: false,
         hardwarePercentage: false,
         adapterPower: false,
+        adapterVoltage: false,
         detail: false
     )
 
@@ -28,6 +31,7 @@ struct BatteryPollNeeds: Equatable {
         systemPower: true,
         hardwarePercentage: true,
         adapterPower: true,
+        adapterVoltage: true,
         detail: true
     )
 
@@ -38,7 +42,8 @@ struct BatteryPollNeeds: Equatable {
         statusBarShowTemperature: Bool,
         statusBarShowPower: Bool,
         useHardwareBatteryPercentage: Bool,
-        needsAdapterPower: Bool
+        needsAdapterPower: Bool,
+        needsAdapterVoltage: Bool
     ) -> BatteryPollNeeds {
         if popoverOpen { return .full }
         return BatteryPollNeeds(
@@ -46,6 +51,7 @@ struct BatteryPollNeeds: Equatable {
             systemPower: statusBarShowPower,
             hardwarePercentage: useHardwareBatteryPercentage,
             adapterPower: needsAdapterPower,
+            adapterVoltage: needsAdapterVoltage || needsAdapterPower,
             detail: false
         )
     }
@@ -194,6 +200,7 @@ final class BatteryService: ObservableObject {
             amperage: smcState.amperage ?? previous.amperage,
             systemPower: smcState.systemPower ?? previous.systemPower,
             adapterPower: smcState.adapterPower ?? previous.adapterPower,
+            adapterVoltage: smcState.adapterVoltage ?? previous.adapterVoltage,
             adapterInfo: adapterInfo,
             batteryPower: smcState.batteryPower ?? previous.batteryPower,
             notChargingReason: ioRegState.notChargingReason,
@@ -220,7 +227,8 @@ final class BatteryService: ObservableObject {
     static func pollNeeds(
         popoverOpen: Bool,
         settings: AppSettings,
-        needsAdapterPower: Bool
+        needsAdapterPower: Bool,
+        needsAdapterVoltage: Bool = false
     ) -> BatteryPollNeeds {
         BatteryPollNeeds.resolve(
             popoverOpen: popoverOpen,
@@ -228,18 +236,29 @@ final class BatteryService: ObservableObject {
             statusBarShowTemperature: settings.statusBarShowTemperature,
             statusBarShowPower: settings.statusBarShowPower,
             useHardwareBatteryPercentage: settings.useHardwareBatteryPercentage,
-            needsAdapterPower: needsAdapterPower
+            needsAdapterPower: needsAdapterPower,
+            needsAdapterVoltage: needsAdapterVoltage
         )
     }
 
     private func currentPollNeeds() -> BatteryPollNeeds {
         let charging = ChargingManager.shared
+        // CHIE force-discharge / CHIE charge-gate make IOKit report Battery Power while
+        // the cable is still attached. Keep reading VD0R (and PDTR in discharge) so we
+        // don't treat that as a real unplug and clear the gate.
+        let controllingWithPossibleCHIE =
+            charging.mode == .discharging
+            || charging.mode == .paused
+            || charging.mode == .sailing
+            || charging.mode == .heatProtection
+            || charging.calibrationPhase == .dischargingToLow
         let needsAdapterPower = charging.mode == .discharging
             || charging.calibrationPhase == .dischargingToLow
         return Self.pollNeeds(
             popoverOpen: isPopoverOpen,
             settings: settings,
-            needsAdapterPower: needsAdapterPower
+            needsAdapterPower: needsAdapterPower,
+            needsAdapterVoltage: controllingWithPossibleCHIE || !batteryState.isPluggedIn
         )
     }
 
@@ -350,6 +369,18 @@ final class BatteryService: ObservableObject {
             }
         }
 
+        // VD0R is the reliable "cable still attached" signal under CHIE. Read it
+        // without pulling the full detail set so lean control polls stay cheap.
+        if needs.adapterVoltage || needs.detail {
+            if let val = smc.readKeyOptional("VD0R") {
+                if val.dataType.hasPrefix("flt"), let f = val.floatValue {
+                    data.adapterVoltage = Self.rounded(Double(f), places: 2)
+                } else if let raw = val.uint16Value {
+                    data.adapterVoltage = Self.rounded(Double(raw) / 1000.0, places: 2)
+                }
+            }
+        }
+
         guard needs.detail || needs.hardwarePercentage else { return data }
 
         if needs.detail {
@@ -363,8 +394,8 @@ final class BatteryService: ObservableObject {
                 data.amperage = Self.rounded(Double(raw) / 1000.0, places: 3)
             }
 
-            // Adapter voltage: VD0R
-            if let val = smc.readKeyOptional("VD0R") {
+            // Adapter voltage already read above when needs.adapterVoltage || detail
+            if data.adapterVoltage == nil, let val = smc.readKeyOptional("VD0R") {
                 if val.dataType.hasPrefix("flt"), let f = val.floatValue {
                     data.adapterVoltage = Self.rounded(Double(f), places: 2)
                 } else if let raw = val.uint16Value {

@@ -783,7 +783,11 @@ struct BatteryInfoTab: View {
                              warn: { $0 < 0 || $0 > 200 })
             }
 
-            if PopoverView.adapterVisible(isPluggedIn: state.isPluggedIn, mode: charging.mode), let adapter = state.adapterInfo {
+            if PopoverView.adapterVisible(
+                isPluggedIn: state.isPluggedIn,
+                isAdapterConnected: state.isAdapterConnected,
+                mode: charging.mode
+            ), let adapter = state.adapterInfo {
                 Section("Adapter") {
                     infoRow("Name", value: adapter.name)
                     if let desc = adapter.description {

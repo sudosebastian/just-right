@@ -10,7 +10,7 @@ final class BatteryStateTests: XCTestCase {
             percentage: 80, hardwarePercentage: nil, isCharging: false, isPluggedIn: true,
             currentCapacity: nil, maxCapacity: 4500, designCapacity: 5000, cycleCount: nil,
             temperature: nil, voltage: nil, amperage: nil,
-            systemPower: nil, adapterPower: nil, adapterInfo: nil,
+            systemPower: nil, adapterPower: nil, adapterVoltage: nil, adapterInfo: nil,
             batteryPower: nil, notChargingReason: nil, chargerInhibitReason: nil, timeToEmpty: nil, timeToFull: nil
         )
         XCTAssertEqual(state.healthPercentage!, 90.0, accuracy: 0.1)
@@ -22,7 +22,7 @@ final class BatteryStateTests: XCTestCase {
             percentage: 100, hardwarePercentage: nil, isCharging: false, isPluggedIn: true,
             currentCapacity: nil, maxCapacity: 5100, designCapacity: 5000, cycleCount: nil,
             temperature: nil, voltage: nil, amperage: nil,
-            systemPower: nil, adapterPower: nil, adapterInfo: nil,
+            systemPower: nil, adapterPower: nil, adapterVoltage: nil, adapterInfo: nil,
             batteryPower: nil, notChargingReason: nil, chargerInhibitReason: nil, timeToEmpty: nil, timeToFull: nil
         )
         XCTAssertEqual(state.healthPercentage!, 102.0, accuracy: 0.1)
@@ -33,7 +33,7 @@ final class BatteryStateTests: XCTestCase {
             percentage: 50, hardwarePercentage: nil, isCharging: false, isPluggedIn: false,
             currentCapacity: nil, maxCapacity: nil, designCapacity: nil, cycleCount: nil,
             temperature: nil, voltage: nil, amperage: nil,
-            systemPower: nil, adapterPower: nil, adapterInfo: nil,
+            systemPower: nil, adapterPower: nil, adapterVoltage: nil, adapterInfo: nil,
             batteryPower: nil, notChargingReason: nil, chargerInhibitReason: nil, timeToEmpty: nil, timeToFull: nil
         )
         XCTAssertNil(state.healthPercentage)
@@ -44,7 +44,7 @@ final class BatteryStateTests: XCTestCase {
             percentage: 50, hardwarePercentage: nil, isCharging: false, isPluggedIn: false,
             currentCapacity: nil, maxCapacity: 5000, designCapacity: 0, cycleCount: nil,
             temperature: nil, voltage: nil, amperage: nil,
-            systemPower: nil, adapterPower: nil, adapterInfo: nil,
+            systemPower: nil, adapterPower: nil, adapterVoltage: nil, adapterInfo: nil,
             batteryPower: nil, notChargingReason: nil, chargerInhibitReason: nil, timeToEmpty: nil, timeToFull: nil
         )
         XCTAssertNil(state.healthPercentage)
@@ -76,7 +76,7 @@ final class BatteryStateTests: XCTestCase {
             percentage: 50, hardwarePercentage: nil, isCharging: false, isPluggedIn: true,
             currentCapacity: nil, maxCapacity: nil, designCapacity: nil, cycleCount: nil,
             temperature: nil, voltage: nil, amperage: nil,
-            systemPower: nil, adapterPower: nil, adapterInfo: nil,
+            systemPower: nil, adapterPower: nil, adapterVoltage: nil, adapterInfo: nil,
             batteryPower: nil, notChargingReason: nil, chargerInhibitReason: nil, timeToEmpty: nil, timeToFull: nil
         )
         XCTAssertFalse(pluggedIn.isOnBattery)
@@ -85,7 +85,7 @@ final class BatteryStateTests: XCTestCase {
             percentage: 50, hardwarePercentage: nil, isCharging: false, isPluggedIn: false,
             currentCapacity: nil, maxCapacity: nil, designCapacity: nil, cycleCount: nil,
             temperature: nil, voltage: nil, amperage: nil,
-            systemPower: nil, adapterPower: nil, adapterInfo: nil,
+            systemPower: nil, adapterPower: nil, adapterVoltage: nil, adapterInfo: nil,
             batteryPower: nil, notChargingReason: nil, chargerInhibitReason: nil, timeToEmpty: nil, timeToFull: nil
         )
         XCTAssertTrue(onBattery.isOnBattery)
@@ -129,7 +129,7 @@ final class BatteryStateTests: XCTestCase {
             percentage: 80, hardwarePercentage: nil, isCharging: true, isPluggedIn: true,
             currentCapacity: nil, maxCapacity: nil, designCapacity: nil, cycleCount: nil,
             temperature: nil, voltage: nil, amperage: nil,
-            systemPower: nil, adapterPower: 18.3, adapterInfo: adapter,
+            systemPower: nil, adapterPower: 18.3, adapterVoltage: nil, adapterInfo: adapter,
             batteryPower: nil, notChargingReason: nil, chargerInhibitReason: nil, timeToEmpty: nil, timeToFull: nil
         )
         XCTAssertEqual(state.adapterInfo?.name, "96W USB-C Power Adapter")
@@ -144,7 +144,7 @@ final class BatteryStateTests: XCTestCase {
             percentage: 50, hardwarePercentage: nil, isCharging: false, isPluggedIn: false,
             currentCapacity: nil, maxCapacity: nil, designCapacity: nil, cycleCount: nil,
             temperature: nil, voltage: nil, amperage: nil,
-            systemPower: nil, adapterPower: nil, adapterInfo: nil,
+            systemPower: nil, adapterPower: nil, adapterVoltage: nil, adapterInfo: nil,
             batteryPower: nil, notChargingReason: nil, chargerInhibitReason: nil, timeToEmpty: nil, timeToFull: nil
         )
         XCTAssertNil(state.adapterInfo)
@@ -157,7 +157,7 @@ final class BatteryStateTests: XCTestCase {
             percentage: 80, hardwarePercentage: nil, isCharging: false, isPluggedIn: true,
             currentCapacity: nil, maxCapacity: nil, designCapacity: nil, cycleCount: nil,
             temperature: nil, voltage: nil, amperage: nil,
-            systemPower: nil, adapterPower: nil, adapterInfo: nil,
+            systemPower: nil, adapterPower: nil, adapterVoltage: nil, adapterInfo: nil,
             batteryPower: nil, notChargingReason: 0, chargerInhibitReason: nil, timeToEmpty: nil, timeToFull: nil
         )
         // Zero means no issue — views should hide this
@@ -171,7 +171,7 @@ final class BatteryStateTests: XCTestCase {
             percentage: 80, hardwarePercentage: nil, isCharging: false, isPluggedIn: true,
             currentCapacity: nil, maxCapacity: nil, designCapacity: nil, cycleCount: nil,
             temperature: nil, voltage: nil, amperage: nil,
-            systemPower: nil, adapterPower: nil, adapterInfo: nil,
+            systemPower: nil, adapterPower: nil, adapterVoltage: nil, adapterInfo: nil,
             batteryPower: nil, notChargingReason: largeReason, chargerInhibitReason: nil, timeToEmpty: nil, timeToFull: nil
         )
         XCTAssertEqual(state.notChargingReason, largeReason)
@@ -185,7 +185,7 @@ final class BatteryStateTests: XCTestCase {
             percentage: 80, hardwarePercentage: nil, isCharging: false, isPluggedIn: true,
             currentCapacity: nil, maxCapacity: nil, designCapacity: nil, cycleCount: nil,
             temperature: nil, voltage: nil, amperage: nil,
-            systemPower: nil, adapterPower: nil, adapterInfo: nil,
+            systemPower: nil, adapterPower: nil, adapterVoltage: nil, adapterInfo: nil,
             batteryPower: nil, notChargingReason: nil, chargerInhibitReason: nil, timeToEmpty: nil, timeToFull: nil
         )
         XCTAssertFalse(state.systemChargeLimitActive)
@@ -196,7 +196,7 @@ final class BatteryStateTests: XCTestCase {
             percentage: 80, hardwarePercentage: nil, isCharging: false, isPluggedIn: true,
             currentCapacity: nil, maxCapacity: nil, designCapacity: nil, cycleCount: nil,
             temperature: nil, voltage: nil, amperage: nil,
-            systemPower: nil, adapterPower: nil, adapterInfo: nil,
+            systemPower: nil, adapterPower: nil, adapterVoltage: nil, adapterInfo: nil,
             batteryPower: nil, notChargingReason: 0, chargerInhibitReason: nil, timeToEmpty: nil, timeToFull: nil
         )
         XCTAssertFalse(state.systemChargeLimitActive)
@@ -208,7 +208,7 @@ final class BatteryStateTests: XCTestCase {
             percentage: 80, hardwarePercentage: nil, isCharging: false, isPluggedIn: true,
             currentCapacity: nil, maxCapacity: nil, designCapacity: nil, cycleCount: nil,
             temperature: nil, voltage: nil, amperage: nil,
-            systemPower: nil, adapterPower: nil, adapterInfo: nil,
+            systemPower: nil, adapterPower: nil, adapterVoltage: nil, adapterInfo: nil,
             batteryPower: nil, notChargingReason: 0x1000000, chargerInhibitReason: nil, timeToEmpty: nil, timeToFull: nil
         )
         XCTAssertTrue(state.systemChargeLimitActive)
@@ -220,7 +220,7 @@ final class BatteryStateTests: XCTestCase {
             percentage: 80, hardwarePercentage: nil, isCharging: false, isPluggedIn: true,
             currentCapacity: nil, maxCapacity: nil, designCapacity: nil, cycleCount: nil,
             temperature: nil, voltage: nil, amperage: nil,
-            systemPower: nil, adapterPower: nil, adapterInfo: nil,
+            systemPower: nil, adapterPower: nil, adapterVoltage: nil, adapterInfo: nil,
             batteryPower: nil, notChargingReason: 0x80000000000000, chargerInhibitReason: nil, timeToEmpty: nil, timeToFull: nil
         )
         XCTAssertFalse(state.systemChargeLimitActive)

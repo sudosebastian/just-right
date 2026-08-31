@@ -14,16 +14,26 @@ struct PopoverView: View {
     }
 
     private var adapterVisible: Bool {
-        Self.adapterVisible(isPluggedIn: battery.batteryState.isPluggedIn, mode: charging.mode)
+        Self.adapterVisible(
+            isPluggedIn: battery.batteryState.isPluggedIn,
+            isAdapterConnected: battery.batteryState.isAdapterConnected,
+            mode: charging.mode
+        )
     }
 
-    static func adapterVisible(isPluggedIn: Bool, mode: ChargingMode) -> Bool {
-        isPluggedIn || mode == .discharging
+    static func adapterVisible(
+        isPluggedIn: Bool,
+        isAdapterConnected: Bool = false,
+        mode: ChargingMode
+    ) -> Bool {
+        // isPluggedIn alone misses CHIE (IOKit says Battery). Prefer physical presence.
+        isPluggedIn || isAdapterConnected || mode == .discharging
     }
 
     private var canDischarge: Bool {
         Self.canDischarge(
             isPluggedIn: battery.batteryState.isPluggedIn,
+            isAdapterConnected: battery.batteryState.isAdapterConnected,
             percentage: displayPercentage,
             chargeLimit: settings.chargeLimit,
             isHelperReady: charging.isHelperConnected,
@@ -33,12 +43,14 @@ struct PopoverView: View {
 
     static func canDischarge(
         isPluggedIn: Bool,
+        isAdapterConnected: Bool = false,
         percentage: Int,
         chargeLimit: Int,
         isHelperReady: Bool,
         chargingAPI: SMCChargingAPI
     ) -> Bool {
-        return isPluggedIn && percentage > chargeLimit && isHelperReady && chargingAPI != .unknown
+        let attached = isPluggedIn || isAdapterConnected
+        return attached && percentage > chargeLimit && isHelperReady && chargingAPI != .unknown
     }
 
     var body: some View {
